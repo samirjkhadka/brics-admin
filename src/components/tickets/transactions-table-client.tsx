@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, ChevronLeft, ChevronRight, Eye, FileCheck, Filter, Calendar as CalendarIcon } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Eye, FileCheck, Filter, Calendar as CalendarIcon, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { formatNPR } from "@/lib/utils/format-currency";
+import { deleteTransaction } from "@/app/actions/transactions";
 
 interface Transaction {
     id: string;
@@ -38,6 +39,15 @@ export default function TransactionsTableClient({ initialData }: { initialData: 
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
+
+    const handleDelete = async (id: string, salesBillNo: string) => {
+        if (confirm(`Are you sure you want to delete transaction #${salesBillNo}? This action cannot be undone.`)) {
+            const res = await deleteTransaction(id);
+            if (!res.success) {
+                alert(res.error || "Failed to delete transaction");
+            }
+        }
+    };
 
     const globalTotals = useMemo(() => {
         return initialData.reduce((acc, tx) => ({
@@ -301,6 +311,16 @@ export default function TransactionsTableClient({ initialData }: { initialData: 
                                                 <Link href={`/dashboard/tickets/${tx.id}/bill`} className="p-1.5 bg-brand-red/5 rounded-lg text-brand-red hover:bg-brand-red hover:text-white transition-colors" title="Print Bill">
                                                     <FileCheck size={14} />
                                                 </Link>
+                                                <Link href={`/dashboard/tickets/${tx.id}/edit`} className="p-1.5 bg-blue-50 rounded-lg text-blue-400 hover:bg-blue-500 hover:text-white transition-colors" title="Edit Transaction">
+                                                    <Pencil size={14} />
+                                                </Link>
+                                                <button
+                                                    onClick={() => handleDelete(tx.id, tx.salesBillNo)}
+                                                    className="p-1.5 bg-red-50 rounded-lg text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+                                                    title="Delete Transaction"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>

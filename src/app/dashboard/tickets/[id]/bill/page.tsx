@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import PrintButton from "@/components/tickets/print-button";
 import { numberToWords } from "@/lib/utils/number-to-words";
-import { formatNPR } from "@/lib/utils/format-currency";
+import { formatNPR, formatNumber } from "@/lib/utils/format-currency";
 
 export default async function BillPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
@@ -36,7 +36,15 @@ export default async function BillPage({ params }: { params: Promise<{ id: strin
                 <PrintButton />
             </div>
 
-            <div className="w-full max-w-[800px] border border-slate-200 shadow-xl mx-auto bg-white p-8 font-serif text-black text-sm print:p-4 print:border-0 print:shadow-none">
+            <div className="w-full max-w-[800px] border border-slate-200 shadow-xl mx-auto bg-white p-8 font-serif text-black text-sm print:p-4 print:border-0 print:shadow-none relative overflow-hidden">
+                {/* Watermark */}
+                <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.08] select-none rotate-[-35deg] overflow-hidden">
+                    <div className="text-center">
+                        <p className="text-7xl font-black uppercase tracking-[0.2em]">Confidential</p>
+                        <p className="text-2xl font-bold uppercase mt-4">Internal Copy - Not to be shared with customer</p>
+                    </div>
+                </div>
+
                 {/* Header */}
                 <div className="text-center mb-6">
                     <h1 className="text-base font-bold tracking-wide">
@@ -112,7 +120,7 @@ export default async function BillPage({ params }: { params: Promise<{ id: strin
                             <th className="border border-foreground px-2 py-2 text-left font-bold" rowSpan={2}>Description</th>
                             <th className="border border-foreground px-2 py-2 text-center font-bold w-14" rowSpan={2}>Qty</th>
                             <th className="border border-foreground px-2 py-2 text-center font-bold w-16" rowSpan={2}>Rate</th>
-                            <th className="border border-foreground px-2 py-1 text-center font-bold" colSpan={2}>Amount</th>
+                            <th className="border border-foreground px-2 py-1 text-center font-bold" colSpan={2}>Amount (NPR)</th>
                         </tr>
                         <tr>
                             <th className="border border-foreground px-2 py-1 text-center font-bold w-24">(A) Taxable</th>
@@ -139,10 +147,12 @@ export default async function BillPage({ params }: { params: Promise<{ id: strin
                                     </div>
                                 </div>
                             </td>
-                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-center font-bold">1</td>
-                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-right font-bold">{formatNPR(tx.salesAmount)}</td>
-                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-right font-bold">{formatNPR(tx.taxableAmount)}</td>
-                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-right font-bold">{formatNPR(tx.exemptAmount)}</td>
+                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-center font-bold">{passengers.length}</td>
+                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-right font-bold">
+                                {formatNumber((tx.taxableAmount + tx.exemptAmount) / passengers.length)}
+                            </td>
+                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-right font-bold">{formatNumber(tx.taxableAmount)}</td>
+                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-right font-bold">{formatNumber(tx.exemptAmount)}</td>
                         </tr>
 
                         {/* Summary rows inside table */}
@@ -154,27 +164,27 @@ export default async function BillPage({ params }: { params: Promise<{ id: strin
                                 </div>
                             </td>
                             <td className="border border-foreground px-2 py-1 text-xs font-bold uppercase">Subtotal</td>
-                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNPR(tx.taxableAmount)}</td>
-                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNPR(tx.exemptAmount)}</td>
+                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNumber(tx.taxableAmount)}</td>
+                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNumber(tx.exemptAmount)}</td>
                         </tr>
                         <tr>
                             <td className="border border-foreground px-2 py-1 text-xs font-bold uppercase">Discount</td>
-                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNPR(0)}</td>
-                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNPR(0)}</td>
+                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNumber(0)}</td>
+                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNumber(0)}</td>
                         </tr>
                         <tr>
                             <td className="border border-foreground px-2 py-1 text-xs font-bold uppercase">Taxable Amt</td>
-                            <td className="border border-foreground px-2 py-1 text-right font-bold bg-slate-50">{formatNPR(tx.taxableAmount)}</td>
-                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNPR(0)}</td>
+                            <td className="border border-foreground px-2 py-1 text-right font-bold bg-slate-50">{formatNumber(tx.taxableAmount)}</td>
+                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNumber(0)}</td>
                         </tr>
                         <tr>
                             <td className="border border-foreground px-2 py-1 text-xs font-bold uppercase">VAT (13%)</td>
-                            <td className="border border-foreground px-2 py-1 text-right font-bold bg-slate-50">{formatNPR(tx.vatAmount)}</td>
-                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNPR(0)}</td>
+                            <td className="border border-foreground px-2 py-1 text-right font-bold bg-slate-50">{formatNumber(tx.vatAmount)}</td>
+                            <td className="border border-foreground px-2 py-1 text-right font-bold">{formatNumber(0)}</td>
                         </tr>
                         <tr className="border-t border-foreground">
-                            <td className="border border-foreground px-2 py-2 text-xs font-black uppercase bg-slate-900 text-white">Grand Total</td>
-                            <td colSpan={2} className="border border-foreground px-2 py-2 text-center text-xl font-black text-slate-900">&nbsp; {formatNPR(grandTotal)}</td>
+                            <td className="border border-foreground px-2 py-2 text-xs font-black uppercase bg-slate-900 text-white leading-tight">Grand Total (NPR)</td>
+                            <td colSpan={2} className="border border-foreground px-2 py-2 text-center text-xl font-black text-slate-900">&nbsp; {formatNumber(grandTotal)}</td>
                         </tr>
                     </tbody>
                 </table>

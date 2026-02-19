@@ -1,37 +1,52 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { createTransaction } from "@/app/actions/transactions";
+import { createTransaction, updateTransaction } from "@/app/actions/transactions";
 import { calculateTax, adToBs, bsToAd } from "@/lib/utils/calculations";
 import { formatNPR } from "@/lib/utils/format-currency";
 import { useRouter } from "next/navigation";
 import { Plus, X, Calendar } from "lucide-react";
 
-export default function TicketEntryForm() {
+export default function TicketEntryForm({ initialData }: { initialData?: any }) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [passengers, setPassengers] = useState<any[]>([{ name: "", ticketNo: "" }]);
 
     const [formData, setFormData] = useState({
-        partyName: "",
-        sector: "",
-        salesBillNo: "",
-        salesDate: new Date().toISOString().split("T")[0],
-        purchaseInvoiceNo: "",
-        purchaseDate: "",
-        purchaseAmount: "",
-        salesAmount: "",
-        exemptAmount: "0",
-        receivedStatus: "BANK",
-        receivedDate: "",
-        receiptNo: "",
-        remarks: "",
-        travelDate: "", // AD strictly
-        partyVatNo: "",
-        contactNo: "",
-        hsCode: "",
+        partyName: initialData?.partyName || "",
+        sector: initialData?.sector || "",
+        salesBillNo: initialData?.salesBillNo || "",
+        salesDate: initialData?.salesDate ? new Date(initialData.salesDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+        purchaseInvoiceNo: initialData?.purchaseInvoiceNo || "",
+        purchaseDate: initialData?.purchaseDate ? new Date(initialData.purchaseDate).toISOString().split("T")[0] : "",
+        purchaseAmount: initialData?.purchaseAmount?.toString() || "",
+        salesAmount: initialData?.salesAmount?.toString() || "",
+        exemptAmount: initialData?.exemptAmount?.toString() || "0",
+        receivedStatus: initialData?.receivedStatus || "BANK",
+        receivedDate: initialData?.receivedDate ? new Date(initialData.receivedDate).toISOString().split("T")[0] : "",
+        receiptNo: initialData?.receiptNo || "",
+        remarks: initialData?.remarks || "",
+        travelDate: initialData?.travelDate ? new Date(initialData.travelDate).toISOString().split("T")[0] : "",
+        partyVatNo: initialData?.partyVatNo || "",
+        contactNo: initialData?.contactNo || "",
+        hsCode: initialData?.hsCode || "",
     });
+
+    useEffect(() => {
+        if (initialData?.passengerNames) {
+            try {
+                const parsed = JSON.parse(initialData.passengerNames);
+                if (Array.isArray(parsed)) {
+                    setPassengers(parsed);
+                } else {
+                    setPassengers([{ name: initialData.passengerNames, ticketNo: "" }]);
+                }
+            } catch {
+                setPassengers([{ name: initialData.passengerNames, ticketNo: "" }]);
+            }
+        }
+    }, [initialData]);
 
     const { taxableAmount, vatAmount } = useMemo(() => {
         return calculateTax(
@@ -105,12 +120,16 @@ export default function TicketEntryForm() {
             return;
         }
 
-        const res = await createTransaction({
+        const payload = {
             ...formData,
             salesDateBS: salesDateBS,
             purchaseDateBS: purchaseDateBS,
             passengerNames: JSON.stringify(passengers.filter(p => p.name.trim() !== ""))
-        });
+        };
+
+        const res = initialData?.id
+            ? await updateTransaction(initialData.id, payload)
+            : await createTransaction(payload);
 
         if (res.success) {
             router.push("/dashboard/tickets");
@@ -124,7 +143,9 @@ export default function TicketEntryForm() {
     return (
         <div className="max-w-5xl mx-auto pb-20 px-4">
             <div className="flex justify-between items-center mb-6 pt-8">
-                <h1 className="text-2xl font-black text-slate-900 tracking-tight">Advanced Ticket Entry</h1>
+                <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+                    {initialData?.id ? "Edit Transaction" : "Advanced Ticket Entry"}
+                </h1>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -345,7 +366,7 @@ export default function TicketEntryForm() {
                 <div className="flex justify-end gap-4">
                     <button type="button" onClick={() => router.back()} className="px-6 py-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors bg-white border border-slate-200 font-semibold shadow-sm">Cancel</button>
                     <button type="submit" disabled={loading} className="px-10 py-3 rounded-lg bg-brand-red hover:bg-brand-red-dark text-white font-black transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-brand-red/20">
-                        {loading ? "Processing..." : "Finalize Transaction"}
+                        {loading ? "Processing..." : initialData?.id ? "Update Transaction" : "Finalize Transaction"}
                     </button>
                 </div>
             </form>

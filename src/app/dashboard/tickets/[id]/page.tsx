@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Download, ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
 import { formatNPR } from "@/lib/utils/format-currency";
+import { TransactionActions } from "@/components/tickets/transaction-actions";
 
 export default async function TransactionDetailPage({
     params,
@@ -36,6 +37,7 @@ export default async function TransactionDetailPage({
                     Back to Registry
                 </Link>
                 <div className="flex gap-4">
+                    <TransactionActions id={tx.id} salesBillNo={tx.salesBillNo} />
                     <Link
                         href={`/dashboard/tickets/${tx.id}/bill`}
                         className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 px-6 py-2.5 rounded-xl border border-slate-200 font-bold transition-all shadow-sm"
