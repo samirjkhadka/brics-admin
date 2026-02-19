@@ -77,7 +77,10 @@ export default async function BillPage({ params }: { params: Promise<{ id: strin
                     <div className="flex items-center">
                         <span className="w-28 font-medium shrink-0">Mr./Ms.</span>
                         <span className="mr-2">:</span>
-                        <span className="flex-1 border-b border-dotted border-foreground/40">&nbsp;{passengers[0]?.name || tx.passengerNames}</span>
+                        <span className="flex-1 border-b border-dotted border-foreground/40 font-bold">
+                            &nbsp;{passengers[0]?.name || tx.passengerNames}
+                            {passengers.length > 1 && ` x ${passengers.length} Pax`}
+                        </span>
                     </div>
                     <div className="flex items-center">
                         <span className="w-28 font-medium shrink-0">Party Name</span>
