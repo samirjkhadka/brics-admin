@@ -1,0 +1,10 @@
+[build]
+  command = "npx prisma generate && next build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  PRISMA_SKIP_POSTINSTALL_GENERATE = "true"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

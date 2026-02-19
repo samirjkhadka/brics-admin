@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String?  @unique
+  mobile    String?  @unique
+  password  String
+  role      String   @default("ADMIN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Transaction {
+  id                String    @id @default(cuid())
+  passengerNames    String
+  partyName         String
+  sector            String
+  salesBillNo       String    @unique
+  salesDate         DateTime
+  salesDateBS       String
+  purchaseInvoiceNo String
+  purchaseDate      DateTime?
+  purchaseDateBS    String?
+  purchaseAmount    Float
+  salesAmount       Float
+  exemptAmount      Float     @default(0)
+  taxableAmount     Float
+  vatAmount         Float
+  receivedStatus    String
+  receivedDate      DateTime?
+  receiptNo         String?
+  remarks           String?
+  travelDate        DateTime?
+  partyVatNo        String?
+  contactNo         String?
+  hsCode            String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
