@@ -7,6 +7,7 @@ import { attachSajanmDatePicker } from "@/lib/nepali/load-client-picker";
 type NepaliDatePickerProps = {
     label: string;
     adValue: string;
+    bsValue?: string;
     onChange: (ad: string, bs: string) => void;
     required?: boolean;
 };
@@ -14,22 +15,35 @@ type NepaliDatePickerProps = {
 export default function NepaliDatePicker({
     label,
     adValue,
+    bsValue: initialBsValue = "",
     onChange,
     required,
 }: NepaliDatePickerProps) {
-    const [bsValue, setBsValue] = useState(adValue ? adStringToBs(adValue) : "");
+    const [bsValue, setBsValue] = useState(initialBsValue);
     const bsInputRef = useRef<HTMLInputElement>(null);
     const destroyPickerRef = useRef<(() => void) | null>(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
 
     useEffect(() => {
-        const bs = adValue ? adStringToBs(adValue) : "";
-        setBsValue(bs);
-        if (bsInputRef.current) {
-            bsInputRef.current.value = bs;
+        if (!adValue) {
+            setBsValue("");
+            if (bsInputRef.current) bsInputRef.current.value = "";
+            return;
         }
-    }, [adValue]);
+        if (initialBsValue) {
+            setBsValue(initialBsValue);
+            if (bsInputRef.current) bsInputRef.current.value = initialBsValue;
+            return;
+        }
+        try {
+            const bs = adStringToBs(adValue);
+            setBsValue(bs);
+            if (bsInputRef.current) bsInputRef.current.value = bs;
+        } catch {
+            // NepaliFunctions not loaded yet (client hydration)
+        }
+    }, [adValue, initialBsValue]);
 
     useEffect(() => {
         const input = bsInputRef.current;

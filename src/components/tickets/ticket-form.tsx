@@ -314,6 +314,7 @@ export default function TicketEntryForm({
                         <NepaliDatePicker
                             label="Sales Date"
                             adValue={formData.salesDate}
+                            bsValue={formData.salesDateBS}
                             required
                             onChange={(ad, bs) =>
                                 setFormData((prev) => ({ ...prev, salesDate: ad, salesDateBS: bs }))
@@ -335,6 +336,7 @@ export default function TicketEntryForm({
                         <NepaliDatePicker
                             label="Purchase Date"
                             adValue={formData.purchaseDate}
+                            bsValue={formData.purchaseDateBS}
                             onChange={(ad, bs) =>
                                 setFormData((prev) => ({
                                     ...prev,
