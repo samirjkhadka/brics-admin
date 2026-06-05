@@ -1,14 +1,16 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import { Role } from "@prisma/client";
 import db from "@/lib/db";
 import bcrypt from "bcryptjs";
 
+/** JWT validity while the browser session is open (cookie cleared on browser close). */
+const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
+
 export const authOptions: NextAuthOptions = {
-    adapter: PrismaAdapter(db),
     session: {
         strategy: "jwt",
-        maxAge: 24 * 60 * 60, // 24 hours (fallback if browser stays open)
+        maxAge: SESSION_MAX_AGE_SECONDS,
     },
     pages: {
         signIn: "/login",
@@ -18,9 +20,9 @@ export const authOptions: NextAuthOptions = {
             name: `next-auth.session-token`,
             options: {
                 httpOnly: true,
-                sameSite: 'lax',
-                path: '/',
-                secure: process.env.NODE_VERSION?.startsWith('20') || process.env.NODE_ENV === 'production',
+                sameSite: "lax",
+                path: "/",
+                secure: process.env.NODE_ENV === "production",
             },
         },
     },
@@ -70,15 +72,15 @@ export const authOptions: NextAuthOptions = {
     callbacks: {
         async jwt({ token, user }) {
             if (user) {
-                token.role = (user as any).role;
+                token.role = user.role as Role;
                 token.id = user.id;
             }
             return token;
         },
         async session({ session, token }) {
             if (session.user) {
-                (session.user as any).role = token.role;
-                (session.user as any).id = token.id;
+                session.user.role = token.role as Role;
+                session.user.id = token.id as string;
             }
             return session;
         },

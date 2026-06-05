@@ -7,41 +7,230 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  SUPERADMIN
+  ADMIN
+  VIEWER
+}
+
+enum PaymentMethod {
+  BANK
+  CASH
+  QR
+  CHEQUE
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum PartnerType {
+  SUPPLIER
+  CUSTOMER
+}
+
+enum PartnerEntityType {
+  BUSINESS
+  INDIVIDUAL
+}
+
+enum FiscalYearStatus {
+  OPEN
+  CLOSED
+}
+
+enum RefundType {
+  CUSTOMER_ONLY
+  CUSTOMER_AND_SUPPLIER
+}
+
+enum RefundStatus {
+  NONE
+  PARTIAL
+  FULL
+}
+
 model User {
   id        String   @id @default(cuid())
   name      String?
   email     String?  @unique
   mobile    String?  @unique
   password  String
-  role      String   @default("ADMIN")
+  role      Role     @default(ADMIN)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
+model FinancialYear {
+  id            String           @id @default(cuid())
+  label         String           @unique
+  bsYearStart   Int
+  billPrefixYear Int
+  startDateAD   DateTime
+  endDateAD     DateTime
+  startDateBS   String
+  endDateBS     String
+  status        FiscalYearStatus @default(OPEN)
+  nextBillSeq   Int              @default(1)
+  nextReceiptSeq Int             @default(1)
+  billNoFormat  String           @default("{year}-{seq:3}")
+  receiptNoFormat String         @default("R-{year}-{seq:3}")
+  closedAt      DateTime?
+  closedById    String?
+  createdAt     DateTime         @default(now())
+  transactions  Transaction[]
+  receipts      PaymentReceipt[]
+  refunds       Refund[]
+  partnerBalances PartnerFiscalBalance[]
+}
+
+model Partner {
+  id                String            @id @default(cuid())
+  name              String
+  type              PartnerType       @default(CUSTOMER)
+  entityType        PartnerEntityType @default(BUSINESS)
+  contactPerson     String?
+  contactNo         String?
+  email             String?
+  vatNo             String?
+  bankName          String            @default("Pending")
+  accountNumber     String            @default("Pending")
+  accountHolderName String?
+  branch            String?
+  address           String?
+  remarks           String?
+  isActive          Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  fiscalBalances    PartnerFiscalBalance[]
+  receipts          PaymentReceipt[]
+
+  @@unique([name, type])
+}
+
+model PartnerFiscalBalance {
+  id             String        @id @default(cuid())
+  partnerId      String
+  partner        Partner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  fiscalYearId   String
+  fiscalYear     FinancialYear @relation(fields: [fiscalYearId], references: [id], onDelete: Cascade)
+  openingBalance Decimal       @default(0) @db.Decimal(12, 2)
+  closingBalance Decimal?      @db.Decimal(12, 2)
+
+  @@unique([partnerId, fiscalYearId])
+}
+
 model Transaction {
-  id                String    @id @default(cuid())
+  id                String        @id @default(cuid())
   passengerNames    String
   partyName         String
+  purchasePartyName String        @default("")
   sector            String
-  salesBillNo       String    @unique
+  salesBillNo       String        @unique
+  billSequence      Int?
+  fiscalYearId      String?
+  fiscalYear        FinancialYear? @relation(fields: [fiscalYearId], references: [id])
   salesDate         DateTime
   salesDateBS       String
   purchaseInvoiceNo String
   purchaseDate      DateTime?
   purchaseDateBS    String?
-  purchaseAmount    Float
-  salesAmount       Float
-  exemptAmount      Float     @default(0)
-  taxableAmount     Float
-  vatAmount         Float
-  receivedStatus    String
+  purchaseAmount    Decimal       @db.Decimal(12, 2)
+  salesAmount       Decimal       @db.Decimal(12, 2)
+  exemptAmount      Decimal       @default(0) @db.Decimal(12, 2)
+  taxableAmount     Decimal       @db.Decimal(12, 2)
+  vatAmount         Decimal       @db.Decimal(12, 2)
+  receivedStatus    PaymentMethod
+  paymentStatus     PaymentStatus @default(UNPAID)
+  amountReceived    Decimal       @default(0) @db.Decimal(12, 2)
   receivedDate      DateTime?
   receiptNo         String?
+  chequeNo          String?
   remarks           String?
   travelDate        DateTime?
   partyVatNo        String?
   contactNo         String?
   hsCode            String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  isVoided          Boolean       @default(false)
+  voidReason        String?
+  voidedAt          DateTime?
+  refundStatus      RefundStatus  @default(NONE)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  notificationLogs  NotificationLog[]
+  receipts          PaymentReceipt[]
+  receiptAllocations PaymentReceiptAllocation[]
+  refunds           Refund[]
+}
+
+model Refund {
+  id                   String        @id @default(cuid())
+  transactionId        String
+  transaction          Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  fiscalYearId         String
+  fiscalYear           FinancialYear @relation(fields: [fiscalYearId], references: [id])
+  refundType           RefundType
+  customerRefundAmount Decimal       @db.Decimal(12, 2)
+  customerCashAmount   Decimal       @default(0) @db.Decimal(12, 2)
+  supplierCreditAmount Decimal       @default(0) @db.Decimal(12, 2)
+  supplierCreditNoteNo String?
+  refundDateAD         DateTime
+  refundDateBS         String
+  paymentMethod        PaymentMethod?
+  paymentReference     String?
+  remarks              String?
+  createdAt            DateTime      @default(now())
+}
+
+model PaymentReceipt {
+  id            String        @id @default(cuid())
+  receiptNo     String        @unique
+  fiscalYearId  String
+  fiscalYear    FinancialYear @relation(fields: [fiscalYearId], references: [id])
+  transactionId String?
+  transaction   Transaction?  @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  partnerId     String?
+  partner       Partner?      @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  partyName     String
+  amount        Decimal       @db.Decimal(12, 2)
+  paymentMethod PaymentMethod
+  chequeNo      String?
+  receiptDateAD DateTime
+  receiptDateBS String
+  issuedAt      DateTime      @default(now())
+  allocations   PaymentReceiptAllocation[]
+}
+
+model PaymentReceiptAllocation {
+  id            String         @id @default(cuid())
+  receiptId     String
+  receipt       PaymentReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  transactionId String
+  transaction   Transaction    @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  amount        Decimal        @db.Decimal(12, 2)
+
+  @@unique([receiptId, transactionId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  userName   String?
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+}
+
+model NotificationLog {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  alertType     String
+  sentAt        DateTime    @default(now())
+
+  @@unique([transactionId, alertType])
 }

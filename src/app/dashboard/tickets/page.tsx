@@ -2,10 +2,51 @@ import db from "@/lib/db";
 import { ArrowLeft, Download, Plus } from "lucide-react";
 import Link from "next/link";
 import TransactionsTableClient from "@/components/tickets/transactions-table-client";
+import { adToBs } from "@/lib/utils/nepali-calendar";
+import { getSession } from "@/lib/auth/session";
+import { Role } from "@prisma/client";
 
-export default async function TransactionsListPage() {
+export default async function TransactionsListPage({
+    searchParams,
+}: {
+    searchParams: Promise<{ sector?: string; purchaseFrom?: string; search?: string }>;
+}) {
+    const { sector, purchaseFrom, search } = await searchParams;
+    const session = await getSession();
+    const canEdit = session?.user?.role === Role.SUPERADMIN || session?.user?.role === Role.ADMIN;
+
     const transactions = await db.transaction.findMany({
         orderBy: { salesDate: "desc" },
+        include: { refunds: true },
+    });
+
+    const serialized = transactions.map((tx) => {
+        const priorCustomerRefund = tx.refunds.reduce(
+            (s, r) => s + Number(r.customerRefundAmount),
+            0
+        );
+        const priorSupplierCredit = tx.refunds.reduce(
+            (s, r) => s + Number(r.supplierCreditAmount),
+            0
+        );
+        const priorCashRefund = tx.refunds.reduce(
+            (s, r) => s + Number(r.customerCashAmount),
+            0
+        );
+        return {
+            ...tx,
+            purchaseAmount: Number(tx.purchaseAmount),
+            salesAmount: Number(tx.salesAmount),
+            exemptAmount: Number(tx.exemptAmount),
+            taxableAmount: Number(tx.taxableAmount),
+            vatAmount: Number(tx.vatAmount),
+            amountReceived: Number(tx.amountReceived),
+            travelDateBS: tx.travelDate ? adToBs(tx.travelDate) : null,
+            priorCustomerRefund,
+            priorSupplierCredit,
+            priorCashRefund,
+            refunds: undefined,
+        };
     });
 
     return (
@@ -14,7 +55,7 @@ export default async function TransactionsListPage() {
                 <div>
                     <Link
                         href="/dashboard"
-                        className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-2 text-sm"
+                        className="flex items-center gap-2 text-slate-400 hover:text-slate-600 transition-colors mb-2 text-sm"
                     >
                         <ArrowLeft size={16} />
                         Back to Dashboard
@@ -30,16 +71,24 @@ export default async function TransactionsListPage() {
                         <Download size={16} />
                         Export All (Excel)
                     </a>
-                    <Link
-                        href="/dashboard/tickets/new"
-                        className="bg-brand-red hover:bg-brand-red-dark text-white px-6 py-2 rounded-lg font-bold transition-all text-sm flex items-center gap-2 shadow-lg shadow-brand-red/20"
-                    >
-                        <Plus size={18} /> New Entry
-                    </Link>
+                    {canEdit && (
+                        <Link
+                            href="/dashboard/tickets/new"
+                            className="bg-brand-red hover:bg-brand-red-dark text-white px-6 py-2 rounded-lg font-bold transition-all text-sm flex items-center gap-2 shadow-lg shadow-brand-red/20"
+                        >
+                            <Plus size={18} /> New Entry
+                        </Link>
+                    )}
                 </div>
             </div>
 
-            <TransactionsTableClient initialData={JSON.parse(JSON.stringify(transactions))} />
+            <TransactionsTableClient
+                initialData={JSON.parse(JSON.stringify(serialized))}
+                canEdit={canEdit}
+                initialSectorFilter={sector ? decodeURIComponent(sector) : ""}
+                initialPurchaseFromFilter={purchaseFrom ? decodeURIComponent(purchaseFrom) : ""}
+                initialSearchTerm={search ? decodeURIComponent(search) : ""}
+            />
         </div>
     );
 }

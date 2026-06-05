@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, LogIn } from "lucide-react";
 
 export default function LoginPage() {
     const [identifier, setIdentifier] = useState("");
@@ -98,8 +98,9 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-black rounded-xl text-white bg-brand-red hover:bg-brand-red-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-red transition-all shadow-lg shadow-brand-red/20 active:scale-[0.98] disabled:opacity-50"
+                            className="group relative w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent text-sm font-black rounded-xl text-white bg-brand-red hover:bg-brand-red-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-red transition-all shadow-lg shadow-brand-red/20 active:scale-[0.98] disabled:opacity-50"
                         >
+                            <LogIn size={18} />
                             {loading ? "Verifying..." : "Sign in to Dashboard"}
                         </button>
                     </div>

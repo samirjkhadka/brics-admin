@@ -3,7 +3,14 @@ import { notFound } from "next/navigation";
 import { Download, ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
 import { formatNPR } from "@/lib/utils/format-currency";
+import { isPurchasePartyUnset } from "@/lib/utils/purchase-party";
+import { parsePassengers } from "@/lib/utils/parse-passengers";
 import { TransactionActions } from "@/components/tickets/transaction-actions";
+import { IssueReceiptButton } from "@/components/tickets/issue-receipt-button";
+import { RefundTransactionButton } from "@/components/tickets/refund-transaction-button";
+import { getSession } from "@/lib/auth/session";
+import { Role } from "@prisma/client";
+import { sumRefundTotals } from "@/lib/refunds/helpers";
 
 export default async function TransactionDetailPage({
     params,
@@ -11,23 +18,45 @@ export default async function TransactionDetailPage({
     params: Promise<{ id: string }>;
 }) {
     const { id } = await params;
-    const tx = await db.transaction.findUnique({
-        where: { id: id },
-    });
+    const [tx, receipt, session] = await Promise.all([
+        db.transaction.findUnique({
+            where: { id },
+            include: { refunds: { orderBy: { refundDateAD: "desc" } } },
+        }),
+        db.paymentReceipt.findFirst({ where: { transactionId: id } }),
+        getSession(),
+    ]);
 
     if (!tx) notFound();
 
-    const passengers = (() => {
-        try {
-            const parsed = JSON.parse(tx.passengerNames);
-            return Array.isArray(parsed) ? parsed : [{ name: tx.passengerNames, ticketNo: "" }];
-        } catch {
-            return [{ name: tx.passengerNames, ticketNo: "" }];
-        }
-    })();
+    const canEdit = session?.user?.role === Role.SUPERADMIN || session?.user?.role === Role.ADMIN;
+    const refundTotals = sumRefundTotals(tx.refunds);
+    const salesAmount = Number(tx.salesAmount);
+    const purchaseAmount = Number(tx.purchaseAmount);
+    const amountReceived = Number(tx.amountReceived);
+
+    const passengers = parsePassengers(tx.passengerNames);
+
+    const supplierMissing = isPurchasePartyUnset(tx.purchasePartyName);
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 pb-20">
+            {supplierMissing && (
+                <div className="bg-orange-50 border border-orange-200 text-orange-900 px-4 py-3 rounded-xl text-sm font-semibold flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                        Purchasing partner not updated
+                        {tx.purchasePartyName ? ` (currently: ${tx.purchasePartyName})` : ""}.
+                    </span>
+                    {canEdit && (
+                        <Link
+                            href={`/dashboard/tickets/${tx.id}/edit`}
+                            className="text-orange-800 font-bold hover:underline text-xs uppercase"
+                        >
+                            Update ticket
+                        </Link>
+                    )}
+                </div>
+            )}
             <div className="flex justify-between items-center">
                 <Link
                     href="/dashboard/tickets"
@@ -36,21 +65,59 @@ export default async function TransactionDetailPage({
                     <ArrowLeft size={18} />
                     Back to Registry
                 </Link>
-                <div className="flex gap-4">
-                    <TransactionActions id={tx.id} salesBillNo={tx.salesBillNo} />
+                <div className="flex flex-wrap gap-3 justify-end">
+                    {canEdit && <TransactionActions id={tx.id} salesBillNo={tx.salesBillNo} />}
+                    {canEdit && !tx.isVoided && (
+                        <IssueReceiptButton
+                            transactionId={tx.id}
+                            hasReceipt={!!receipt}
+                            receiptNo={receipt?.receiptNo || tx.receiptNo}
+                        />
+                    )}
+                    {canEdit && (
+                        <RefundTransactionButton
+                            id={tx.id}
+                            salesBillNo={tx.salesBillNo}
+                            salesAmount={salesAmount}
+                            purchaseAmount={purchaseAmount}
+                            amountReceived={amountReceived}
+                            isVoided={tx.isVoided}
+                            refundStatus={tx.refundStatus}
+                            priorCustomerRefund={refundTotals.customerRefund}
+                            priorSupplierCredit={refundTotals.supplierCredit}
+                            priorCashRefund={refundTotals.customerCash}
+                            showLabel
+                        />
+                    )}
                     <Link
                         href={`/dashboard/tickets/${tx.id}/bill`}
                         className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 px-6 py-2.5 rounded-xl border border-slate-200 font-bold transition-all shadow-sm"
                     >
                         <Printer size={18} />
-                        Detailed Bill
+                        Proforma Bill
                     </Link>
+                    <Link
+                        href={`/dashboard/tickets/${tx.id}/tax-invoice`}
+                        className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-sm"
+                    >
+                        <Printer size={18} />
+                        Tax Invoice
+                    </Link>
+                    {receipt && (
+                        <Link
+                            href={`/dashboard/tickets/${tx.id}/receipt`}
+                            className="flex items-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-6 py-2.5 rounded-xl border border-emerald-200 font-bold transition-all"
+                        >
+                            <Printer size={18} />
+                            Receipt
+                        </Link>
+                    )}
                     <a
                         href={`/api/export/pdf/${tx.id}`}
                         className="flex items-center gap-2 bg-brand-red hover:bg-brand-red-dark text-white px-6 py-2.5 rounded-xl font-black transition-all shadow-lg shadow-brand-red/20 active:scale-95"
                     >
                         <Download size={18} />
-                        Download PDF
+                        Download DOCX
                     </a>
                 </div>
             </div>
@@ -75,6 +142,7 @@ export default async function TransactionDetailPage({
                             <p className="text-lg font-black text-slate-900">{tx.partyName}</p>
                             <p className="text-sm text-slate-600 font-medium mt-1">VAT No: <span className="text-slate-900">{tx.partyVatNo || "N/A"}</span></p>
                             <p className="text-sm text-slate-600 font-medium">Contact: <span className="text-slate-900">{tx.contactNo || "N/A"}</span></p>
+                            <p className="text-sm text-slate-600 font-medium">Purchased From: <span className="text-slate-900">{tx.purchasePartyName}</span></p>
                         </div>
                     </div>
                     <div className="text-right space-y-4">
@@ -119,6 +187,75 @@ export default async function TransactionDetailPage({
                             </tr>
                         </tbody>
                     </table>
+                </div>
+
+                {tx.refunds.length > 0 && (
+                    <div className="mb-8 bg-violet-50 p-6 rounded-2xl border border-violet-100">
+                        <p className="text-[10px] font-black text-violet-600 uppercase tracking-widest mb-3">
+                            Refunds ({tx.refundStatus})
+                        </p>
+                        <div className="space-y-3">
+                            {tx.refunds.map((r) => (
+                                <div
+                                    key={r.id}
+                                    className="bg-white rounded-xl border border-violet-100 p-4 text-sm grid grid-cols-2 md:grid-cols-4 gap-3"
+                                >
+                                    <div>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Date</span>
+                                        <p className="font-semibold">{r.refundDateBS}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Type</span>
+                                        <p className="font-semibold">{r.refundType.replace(/_/g, " ")}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Customer</span>
+                                        <p className="font-semibold">{formatNPR(r.customerRefundAmount)}</p>
+                                        {Number(r.customerCashAmount) > 0 && (
+                                            <p className="text-xs text-slate-500">
+                                                Cash: {formatNPR(r.customerCashAmount)}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Supplier CN</span>
+                                        <p className="font-semibold">
+                                            {r.supplierCreditNoteNo || "—"}
+                                        </p>
+                                        {Number(r.supplierCreditAmount) > 0 && (
+                                            <p className="text-xs text-slate-500">
+                                                {formatNPR(r.supplierCreditAmount)}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div className="mb-8 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Payment & Receipt</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                            <span className="text-slate-500 font-bold text-[10px] uppercase">Payment Via</span>
+                            <p className="text-slate-900 font-semibold">{tx.receivedStatus}</p>
+                        </div>
+                        {tx.chequeNo && (
+                            <div>
+                                <span className="text-slate-500 font-bold text-[10px] uppercase">Cheque No</span>
+                                <p className="text-slate-900 font-semibold">{tx.chequeNo}</p>
+                            </div>
+                        )}
+                        <div>
+                            <span className="text-slate-500 font-bold text-[10px] uppercase">Receipt Date</span>
+                            <p className="text-slate-900 font-semibold">{tx.receivedDate?.toLocaleDateString() || "N/A"}</p>
+                        </div>
+                        <div>
+                            <span className="text-slate-500 font-bold text-[10px] uppercase">Receipt No</span>
+                            <p className="text-slate-900 font-semibold">{tx.receiptNo || "N/A"}</p>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="flex justify-end">
