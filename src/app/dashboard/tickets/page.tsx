@@ -9,9 +9,9 @@ import { Role } from "@prisma/client";
 export default async function TransactionsListPage({
     searchParams,
 }: {
-    searchParams: Promise<{ sector?: string; purchaseFrom?: string; search?: string }>;
+    searchParams: Promise<{ sector?: string; purchaseFrom?: string; party?: string; search?: string }>;
 }) {
-    const { sector, purchaseFrom, search } = await searchParams;
+    const { sector, purchaseFrom, party, search } = await searchParams;
     const session = await getSession();
     const canEdit = session?.user?.role === Role.SUPERADMIN || session?.user?.role === Role.ADMIN;
 
@@ -87,6 +87,7 @@ export default async function TransactionsListPage({
                 canEdit={canEdit}
                 initialSectorFilter={sector ? decodeURIComponent(sector) : ""}
                 initialPurchaseFromFilter={purchaseFrom ? decodeURIComponent(purchaseFrom) : ""}
+                initialPartyFilter={party ? decodeURIComponent(party) : ""}
                 initialSearchTerm={search ? decodeURIComponent(search) : ""}
             />
         </div>

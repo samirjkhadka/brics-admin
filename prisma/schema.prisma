@@ -89,6 +89,7 @@ model FinancialYear {
   receipts      PaymentReceipt[]
   refunds       Refund[]
   partnerBalances PartnerFiscalBalance[]
+  supplierPayments SupplierPayment[]
 }
 
 model Partner {
@@ -111,6 +112,7 @@ model Partner {
   updatedAt         DateTime    @updatedAt
   fiscalBalances    PartnerFiscalBalance[]
   receipts          PaymentReceipt[]
+  supplierPayments  SupplierPayment[]
 
   @@unique([name, type])
 }
@@ -233,6 +235,25 @@ model PaymentReceipt {
   receiptDateBS String
   issuedAt      DateTime      @default(now())
   allocations   PaymentReceiptAllocation[]
+}
+
+model SupplierPayment {
+  id               String        @id @default(cuid())
+  fiscalYearId     String
+  fiscalYear       FinancialYear @relation(fields: [fiscalYearId], references: [id])
+  partnerId        String?
+  partner          Partner?      @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  supplierName     String
+  amount           Decimal       @db.Decimal(12, 2)
+  paymentMethod    PaymentMethod
+  chequeNo         String?
+  paymentDateAD    DateTime
+  paymentDateBS    String
+  paymentReference String?
+  remarks          String?
+  createdAt        DateTime      @default(now())
+
+  @@index([fiscalYearId, supplierName])
 }
 
 model PaymentReceiptAllocation {

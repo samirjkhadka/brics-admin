@@ -31,18 +31,18 @@ export const SAMPLE_BALANCE_CONFIRMATION = {
 export const SAMPLE_CUSTOMER_STATEMENT = {
     fyLabel: "2082/83",
     rows: [
-        { partyName: "Himalayan Adventures Pvt. Ltd.", billed: 185000, received: 97500, balance: 87500 },
-        { partyName: "Everest Trekking Co.", billed: 92000, received: 92000, balance: 0 },
-        { partyName: "Annapurna Holidays", billed: 54000, received: 20000, balance: 34000 },
+        { partyName: "Himalayan Adventures Pvt. Ltd.", billCount: 8, billed: 185000, received: 97500, balance: 87500 },
+        { partyName: "Everest Trekking Co.", billCount: 5, billed: 92000, received: 92000, balance: 0 },
+        { partyName: "Annapurna Holidays", billCount: 3, billed: 54000, received: 20000, balance: 34000 },
     ],
 };
 
 export const SAMPLE_SUPPLIER_STATEMENT = {
     fyLabel: "2082/83",
     rows: [
-        { supplierName: "Air Arabia GSA", count: 12, purchase: 245000 },
-        { supplierName: "Buddha Air", count: 8, purchase: 98000 },
-        { supplierName: "Yeti Airlines", count: 5, purchase: 67500 },
+        { supplierName: "Air Arabia GSA", count: 12, purchase: 245000, paymentsMade: 200000, balanceDue: 45000 },
+        { supplierName: "Buddha Air", count: 8, purchase: 98000, paymentsMade: 98000, balanceDue: 0 },
+        { supplierName: "Yeti Airlines", count: 5, purchase: 67500, paymentsMade: 40000, balanceDue: 27500 },
     ],
 };
 

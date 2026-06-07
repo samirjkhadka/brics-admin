@@ -7,6 +7,7 @@ import { sumRefundTotals } from "@/lib/refunds/helpers";
 export type PartyLedgerSummary = {
     partyName: string;
     partnerId: string | null;
+    billCount: number;
     openingBalance: number;
     totalBilled: number;
     totalReceived: number;
@@ -33,10 +34,13 @@ export type PartyLedgerLine = {
 
 export type SupplierStatementRow = {
     supplierName: string;
+    partnerId: string | null;
     count: number;
     purchase: number;
     creditNotes: number;
     netPurchase: number;
+    paymentsMade: number;
+    balanceDue: number;
 };
 
 function normalizeName(name: string): string {
@@ -179,11 +183,14 @@ export async function getPartyLedgerSummary(
 
         const closing = computeClosingBalance(opening, billed, received);
 
+        const billCount = partyTxs.length;
+
         if (opening === 0 && billed === 0 && received === 0 && totalRefunded === 0) continue;
 
         summaries.push({
             partyName,
             partnerId: partner?.id || null,
+            billCount,
             openingBalance: opening,
             totalBilled: billed,
             totalReceived: received,
@@ -381,7 +388,7 @@ export async function getPartyLedgerLines(
 }
 
 export async function getSupplierStatement(fiscalYearId: string): Promise<SupplierStatementRow[]> {
-    const [purchaseLegs, refunds] = await Promise.all([
+    const [purchaseLegs, refunds, payments, suppliers] = await Promise.all([
         db.purchaseLeg.findMany({
             where: { transaction: { fiscalYearId, isVoided: false } },
             select: {
@@ -396,12 +403,25 @@ export async function getSupplierStatement(fiscalYearId: string): Promise<Suppli
                 transaction: { select: { purchasePartyName: true } },
             },
         }),
+        db.supplierPayment.findMany({
+            where: { fiscalYearId },
+            select: { supplierName: true, amount: true },
+        }),
+        db.partner.findMany({
+            where: { type: PartnerType.SUPPLIER, isActive: true },
+            select: { id: true, name: true },
+        }),
     ]);
 
-    const map = new Map<string, { purchase: number; count: number; creditNotes: number }>();
+    const supplierByName = new Map(suppliers.map((p) => [normalizeName(p.name), p]));
+
+    const map = new Map<
+        string,
+        { purchase: number; count: number; creditNotes: number; paymentsMade: number }
+    >();
     for (const leg of purchaseLegs) {
         const key = leg.purchasePartyName || "Unspecified";
-        const cur = map.get(key) || { purchase: 0, count: 0, creditNotes: 0 };
+        const cur = map.get(key) || { purchase: 0, count: 0, creditNotes: 0, paymentsMade: 0 };
         cur.purchase += Number(leg.purchaseAmount);
         cur.count += 1;
         map.set(key, cur);
@@ -411,19 +431,32 @@ export async function getSupplierStatement(fiscalYearId: string): Promise<Suppli
         const credit = Number(r.supplierCreditAmount);
         if (credit <= 0) continue;
         const key = r.transaction.purchasePartyName || "Unspecified";
-        const cur = map.get(key) || { purchase: 0, count: 0, creditNotes: 0 };
+        const cur = map.get(key) || { purchase: 0, count: 0, creditNotes: 0, paymentsMade: 0 };
         cur.creditNotes += credit;
         map.set(key, cur);
     }
 
+    for (const payment of payments) {
+        const key = payment.supplierName || "Unspecified";
+        const cur = map.get(key) || { purchase: 0, count: 0, creditNotes: 0, paymentsMade: 0 };
+        cur.paymentsMade += Number(payment.amount);
+        map.set(key, cur);
+    }
+
     return Array.from(map.entries())
-        .map(([name, data]) => ({
-            supplierName: name,
-            count: data.count,
-            purchase: data.purchase,
-            creditNotes: data.creditNotes,
-            netPurchase: data.purchase - data.creditNotes,
-        }))
-        .filter((row) => row.purchase > 0 || row.creditNotes > 0)
+        .map(([name, data]) => {
+            const netPurchase = data.purchase - data.creditNotes;
+            return {
+                supplierName: name,
+                partnerId: supplierByName.get(normalizeName(name))?.id || null,
+                count: data.count,
+                purchase: data.purchase,
+                creditNotes: data.creditNotes,
+                netPurchase,
+                paymentsMade: data.paymentsMade,
+                balanceDue: netPurchase - data.paymentsMade,
+            };
+        })
+        .filter((row) => row.purchase > 0 || row.creditNotes > 0 || row.paymentsMade > 0)
         .sort((a, b) => a.supplierName.localeCompare(b.supplierName));
 }

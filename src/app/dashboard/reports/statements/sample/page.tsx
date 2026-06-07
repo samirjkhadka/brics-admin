@@ -19,6 +19,7 @@ export default function StatementsSamplePage() {
                             <thead>
                                 <tr className="bg-slate-100">
                                     <th className="border border-slate-300 px-3 py-2 text-left">Customer</th>
+                                    <th className="border border-slate-300 px-3 py-2 text-right">Bills</th>
                                     <th className="border border-slate-300 px-3 py-2 text-right">Billed</th>
                                     <th className="border border-slate-300 px-3 py-2 text-right">Received</th>
                                     <th className="border border-slate-300 px-3 py-2 text-right">Balance</th>
@@ -28,6 +29,7 @@ export default function StatementsSamplePage() {
                                 {SAMPLE_CUSTOMER_STATEMENT.rows.map((row) => (
                                     <tr key={row.partyName}>
                                         <td className="border border-slate-300 px-3 py-2 font-semibold">{row.partyName}</td>
+                                        <td className="border border-slate-300 px-3 py-2 text-right">{row.billCount}</td>
                                         <td className="border border-slate-300 px-3 py-2 text-right font-mono">{formatNPR(row.billed)}</td>
                                         <td className="border border-slate-300 px-3 py-2 text-right font-mono">{formatNPR(row.received)}</td>
                                         <td className="border border-slate-300 px-3 py-2 text-right font-mono font-bold">{formatNPR(row.balance)}</td>
@@ -48,7 +50,9 @@ export default function StatementsSamplePage() {
                                 <tr className="bg-slate-100">
                                     <th className="border border-slate-300 px-3 py-2 text-left">Supplier</th>
                                     <th className="border border-slate-300 px-3 py-2 text-right">Bills</th>
-                                    <th className="border border-slate-300 px-3 py-2 text-right">Purchase Total</th>
+                                    <th className="border border-slate-300 px-3 py-2 text-right">Net Purchase</th>
+                                    <th className="border border-slate-300 px-3 py-2 text-right">Payment Made</th>
+                                    <th className="border border-slate-300 px-3 py-2 text-right">Balance Due</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -57,6 +61,8 @@ export default function StatementsSamplePage() {
                                         <td className="border border-slate-300 px-3 py-2 font-semibold">{row.supplierName}</td>
                                         <td className="border border-slate-300 px-3 py-2 text-right">{row.count}</td>
                                         <td className="border border-slate-300 px-3 py-2 text-right font-mono font-bold">{formatNPR(row.purchase)}</td>
+                                        <td className="border border-slate-300 px-3 py-2 text-right font-mono">{formatNPR(row.paymentsMade)}</td>
+                                        <td className="border border-slate-300 px-3 py-2 text-right font-mono font-bold">{formatNPR(row.balanceDue)}</td>
                                     </tr>
                                 ))}
                             </tbody>

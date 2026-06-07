@@ -216,18 +216,21 @@ export default function TransactionsTableClient({
     canEdit = true,
     initialSectorFilter = "",
     initialPurchaseFromFilter = "",
+    initialPartyFilter = "",
     initialSearchTerm = "",
 }: {
     initialData: Transaction[];
     canEdit?: boolean;
     initialSectorFilter?: string;
     initialPurchaseFromFilter?: string;
+    initialPartyFilter?: string;
     initialSearchTerm?: string;
 }) {
     const router = useRouter();
     const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
     const [sectorFilter, setSectorFilter] = useState(initialSectorFilter);
     const [purchaseFromFilter, setPurchaseFromFilter] = useState(initialPurchaseFromFilter);
+    const [partyFilter, setPartyFilter] = useState(initialPartyFilter);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showVoidModal, setShowVoidModal] = useState(false);
@@ -330,6 +333,13 @@ export default function TransactionsTableClient({
                 return false;
             }
 
+            if (
+                partyFilter &&
+                (tx.partyName || "").toLowerCase() !== partyFilter.toLowerCase()
+            ) {
+                return false;
+            }
+
             if (paymentFilter !== "ALL" && tx.paymentStatus !== paymentFilter) return false;
 
             if (filterType === "ALL") return true;
@@ -372,6 +382,7 @@ export default function TransactionsTableClient({
         paymentFilter,
         sectorFilter,
         purchaseFromFilter,
+        partyFilter,
     ]);
 
     const selectedTransactions = useMemo(
@@ -461,6 +472,7 @@ export default function TransactionsTableClient({
         paymentFilter,
         sectorFilter,
         purchaseFromFilter,
+        partyFilter,
         sortKey,
         sortDir,
         itemsPerPage,
@@ -523,6 +535,21 @@ export default function TransactionsTableClient({
                         type="button"
                         onClick={() => setPurchaseFromFilter("")}
                         className="inline-flex items-center gap-1 text-violet-600 hover:text-violet-900 text-xs font-bold"
+                    >
+                        <X size={14} /> Clear
+                    </button>
+                </div>
+            )}
+
+            {partyFilter && (
+                <div className="mx-2 flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 rounded-xl text-sm font-semibold">
+                    <span>
+                        Customer: <strong>{partyFilter}</strong>
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setPartyFilter("")}
+                        className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-900 text-xs font-bold"
                     >
                         <X size={14} /> Clear
                     </button>

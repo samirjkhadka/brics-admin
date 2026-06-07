@@ -6,6 +6,8 @@ import { formatNPR } from "@/lib/utils/format-currency";
 import Link from "next/link";
 import FySelect from "@/components/reports/fy-select";
 import ViewSampleLink from "@/components/reports/view-sample-link";
+import SupplierStatementTable from "@/components/reports/supplier-statement-table";
+import { getSession } from "@/lib/auth/session";
 
 export default async function StatementsPage({
     searchParams,
@@ -13,6 +15,10 @@ export default async function StatementsPage({
     searchParams: Promise<{ fy?: string; tab?: string }>;
 }) {
     const { fy: fyId, tab } = await searchParams;
+    const session = await getSession();
+    const canEdit =
+        session?.user?.role === Role.SUPERADMIN || session?.user?.role === Role.ADMIN;
+
     const years = await db.financialYear.findMany({ orderBy: { startDateAD: "desc" } });
     const selected =
         (fyId ? years.find((y) => y.id === fyId) : null) ||
@@ -25,7 +31,7 @@ export default async function StatementsPage({
 
     return (
         <RoleGate allowed={[Role.SUPERADMIN, Role.ADMIN, Role.VIEWER]}>
-            <div className="max-w-5xl mx-auto space-y-6">
+            <div className="max-w-6xl mx-auto space-y-6">
                 <div className="flex flex-wrap justify-between items-center gap-4">
                     <h1 className="text-3xl font-black text-slate-900">Statements</h1>
                     <ViewSampleLink href="/dashboard/reports/statements/sample" />
@@ -43,6 +49,7 @@ export default async function StatementsPage({
                         <thead>
                             <tr className="bg-slate-50 text-xs font-bold uppercase text-slate-500">
                                 <th className="px-4 py-3 text-left">Customer</th>
+                                <th className="px-4 py-3 text-right">Bills</th>
                                 <th className="px-4 py-3 text-right">Billed</th>
                                 <th className="px-4 py-3 text-right">Received</th>
                                 <th className="px-4 py-3 text-right">Balance</th>
@@ -50,8 +57,17 @@ export default async function StatementsPage({
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {customerData.map((s) => (
-                                <tr key={s.partyName}>
+                                <tr key={s.partyName} className="hover:bg-slate-50">
                                     <td className="px-4 py-3 font-semibold">{s.partyName}</td>
+                                    <td className="px-4 py-3 text-right">
+                                        <Link
+                                            href={`/dashboard/tickets?party=${encodeURIComponent(s.partyName)}`}
+                                            className="font-bold text-brand-red hover:underline"
+                                            title="View bills in All Transactions"
+                                        >
+                                            {s.billCount}
+                                        </Link>
+                                    </td>
                                     <td className="px-4 py-3 text-right font-mono">{formatNPR(s.totalBilled)}</td>
                                     <td className="px-4 py-3 text-right font-mono">{formatNPR(s.totalReceived)}</td>
                                     <td className="px-4 py-3 text-right font-mono font-bold">{formatNPR(s.closingBalance)}</td>
@@ -59,40 +75,13 @@ export default async function StatementsPage({
                             ))}
                         </tbody>
                     </table>
-                ) : (
-                    <table className="w-full bg-white border border-slate-200 rounded-2xl overflow-hidden text-sm">
-                        <thead>
-                            <tr className="bg-slate-50 text-xs font-bold uppercase text-slate-500">
-                                <th className="px-4 py-3 text-left">Supplier</th>
-                                <th className="px-4 py-3 text-right">Bills</th>
-                                <th className="px-4 py-3 text-right">Gross Purchase</th>
-                                <th className="px-4 py-3 text-right">Credit Notes</th>
-                                <th className="px-4 py-3 text-right">Net Purchase</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {supplierData.map((s) => (
-                                <tr key={s.supplierName} className="hover:bg-slate-50">
-                                    <td className="px-4 py-3 font-semibold">{s.supplierName}</td>
-                                    <td className="px-4 py-3 text-right">
-                                        <Link
-                                            href={`/dashboard/tickets?purchaseFrom=${encodeURIComponent(s.supplierName)}`}
-                                            className="font-bold text-brand-red hover:underline"
-                                            title="View bills in All Transactions"
-                                        >
-                                            {s.count}
-                                        </Link>
-                                    </td>
-                                    <td className="px-4 py-3 text-right font-mono">{formatNPR(s.purchase)}</td>
-                                    <td className="px-4 py-3 text-right font-mono text-violet-600">
-                                        {s.creditNotes > 0 ? formatNPR(s.creditNotes) : "—"}
-                                    </td>
-                                    <td className="px-4 py-3 text-right font-mono font-bold">{formatNPR(s.netPurchase)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
+                ) : selected ? (
+                    <SupplierStatementTable
+                        rows={supplierData}
+                        fiscalYearId={selected.id}
+                        canEdit={canEdit}
+                    />
+                ) : null}
             </div>
         </RoleGate>
     );
