@@ -6,18 +6,25 @@ import { FiscalYearStatus, PartnerType, Role } from "@prisma/client";
 import { calculateTax } from "@/lib/utils/calculations";
 import { toDecimal } from "@/lib/utils/decimal";
 import { requireRole } from "@/lib/auth/session";
+import { publicErrorMessage } from "@/lib/security/sanitize-error";
 import {
     transactionSchema,
     voidTransactionSchema,
+    bulkVoidTransactionsSchema,
+    bulkDeleteTransactionsSchema,
     TransactionInput,
 } from "@/lib/validations/transaction";
-import { upsertPartnerFromTicketEntry } from "@/app/actions/partners";
+import { upsertPartnerFromTicketEntry } from "@/lib/partners/upsert-from-ticket";
 import {
     allocateNextSalesBillNo,
     resolveFinancialYearForDate,
 } from "@/lib/fiscal-year/service";
-import { derivePaymentStatus } from "@/lib/utils/payment-status";
+import {
+    derivePaymentStatus,
+    resolveReceivedStatusForSave,
+} from "@/lib/utils/payment-status";
 import { writeAuditLog } from "@/lib/audit/log";
+import { expandTransactionIdsWithBookingGroups } from "@/lib/booking/group";
 
 function resolveAmountReceived(input: TransactionInput): number {
     if (input.amountReceived != null && input.amountReceived > 0) {
@@ -61,7 +68,11 @@ function buildTransactionData(
         exemptAmount: toDecimal(input.exemptAmount),
         taxableAmount: toDecimal(taxableAmount),
         vatAmount: toDecimal(vatAmount),
-        receivedStatus: input.receivedStatus,
+        receivedStatus: resolveReceivedStatusForSave(
+            input.receivedStatus,
+            amountReceived,
+            input.receivedDate
+        ),
         amountReceived: toDecimal(amountReceived),
         paymentStatus: derivePaymentStatus(input.salesAmount, amountReceived),
         receivedDate: input.receivedDate ? new Date(input.receivedDate) : null,
@@ -124,22 +135,37 @@ export async function createTransaction(formData: unknown) {
         const fyCheck = await validateFiscalYearForCreate(parsed.data.salesDate);
         if (!fyCheck.ok) return { success: false, error: fyCheck.error };
 
-        const dup = await db.transaction.findFirst({
-            where: { purchaseInvoiceNo: parsed.data.purchaseInvoiceNo },
-        });
-        if (dup) {
-            return { success: false, error: `Purchase invoice ${parsed.data.purchaseInvoiceNo} already exists` };
-        }
-
         const bill = await allocateNextSalesBillNo(fyCheck.fy.id);
         await persistPartnersFromTransaction(parsed.data);
 
         const transaction = await db.transaction.create({
-            data: buildTransactionData(parsed.data, {
-                fiscalYearId: bill.fiscalYearId,
-                billSequence: bill.billSequence,
-                salesBillNo: bill.salesBillNo,
-            }),
+            data: {
+                ...buildTransactionData(parsed.data, {
+                    fiscalYearId: bill.fiscalYearId,
+                    billSequence: bill.billSequence,
+                    salesBillNo: bill.salesBillNo,
+                }),
+                purchaseLegs: {
+                    create: [
+                        {
+                            legIndex: 1,
+                            purchaseInvoiceNo: parsed.data.purchaseInvoiceNo,
+                            purchasePartyName: parsed.data.purchasePartyName,
+                            sector: parsed.data.sector,
+                            purchaseDate: parsed.data.purchaseDate
+                                ? new Date(parsed.data.purchaseDate)
+                                : null,
+                            purchaseDateBS: parsed.data.purchaseDateBS || null,
+                            travelDate: parsed.data.travelDate
+                                ? new Date(parsed.data.travelDate)
+                                : null,
+                            travelDateBS: null,
+                            purchaseAmount: toDecimal(parsed.data.purchaseAmount),
+                            lineSalesAmount: toDecimal(parsed.data.salesAmount),
+                        },
+                    ],
+                },
+            },
         });
 
         await writeAuditLog({
@@ -158,7 +184,7 @@ export async function createTransaction(formData: unknown) {
         return { success: true, data: transaction };
     } catch (error: unknown) {
         console.error("TX Error:", error);
-        const message = error instanceof Error ? error.message : "Failed to create transaction";
+        const message = publicErrorMessage(error, "Failed to create transaction");
         return { success: false, error: message };
     }
 }
@@ -213,7 +239,7 @@ export async function updateTransaction(id: string, formData: unknown) {
         return { success: true, data: transaction };
     } catch (error: unknown) {
         console.error("Update TX Error:", error);
-        const message = error instanceof Error ? error.message : "Failed to update transaction";
+        const message = publicErrorMessage(error, "Failed to update transaction");
         return { success: false, error: message };
     }
 }
@@ -256,7 +282,7 @@ export async function voidTransaction(id: string, formData: unknown) {
 
         return { success: true };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to void transaction";
+        const message = publicErrorMessage(error, "Failed to void transaction");
         return { success: false, error: message };
     }
 }
@@ -282,14 +308,135 @@ export async function deleteTransaction(id: string) {
         return { success: true };
     } catch (error: unknown) {
         console.error("Delete TX Error:", error);
-        const message = error instanceof Error ? error.message : "Failed to delete transaction";
+        const message = publicErrorMessage(error, "Failed to delete transaction");
+        return { success: false, error: message };
+    }
+}
+
+export async function bulkVoidTransactions(formData: unknown) {
+    const auth = await requireRole([Role.SUPERADMIN, Role.ADMIN]);
+    if (!auth.ok) return { success: false, error: auth.error };
+
+    const parsed = bulkVoidTransactionsSchema.safeParse(formData);
+    if (!parsed.success) {
+        return { success: false, error: parsed.error.issues[0]?.message || "Invalid input" };
+    }
+
+    const { transactionIds, reason, expandBookingGroups } = parsed.data;
+
+    try {
+        const targetIds = expandBookingGroups
+            ? await expandTransactionIdsWithBookingGroups(transactionIds)
+            : transactionIds;
+
+        const transactions = await db.transaction.findMany({
+            where: { id: { in: targetIds } },
+            select: { id: true, salesBillNo: true, isVoided: true },
+        });
+
+        if (transactions.length !== targetIds.length) {
+            return { success: false, error: "One or more transactions not found" };
+        }
+
+        const voidable = transactions.filter((t) => !t.isVoided);
+        if (voidable.length === 0) {
+            return { success: false, error: "All selected transactions are already voided" };
+        }
+
+        const voidedAt = new Date();
+        const trimmedReason = reason.trim();
+
+        await db.transaction.updateMany({
+            where: { id: { in: voidable.map((t) => t.id) }, isVoided: false },
+            data: {
+                isVoided: true,
+                voidReason: trimmedReason,
+                voidedAt,
+            },
+        });
+
+        await writeAuditLog({
+            userId: auth.session.user.id,
+            userName: auth.session.user.name,
+            action: "BULK_VOID_TX",
+            entityType: "Transaction",
+            entityId: voidable[0].id,
+            metadata: {
+                reason: trimmedReason,
+                count: voidable.length,
+                billNos: voidable.map((t) => t.salesBillNo),
+                transactionIds: voidable.map((t) => t.id),
+            },
+        });
+
+        revalidatePath("/dashboard");
+        revalidatePath("/dashboard/tickets");
+
+        return {
+            success: true,
+            count: voidable.length,
+            skipped: transactions.length - voidable.length,
+        };
+    } catch (error: unknown) {
+        const message = publicErrorMessage(error, "Failed to void transactions");
+        return { success: false, error: message };
+    }
+}
+
+export async function bulkDeleteTransactions(formData: unknown) {
+    const auth = await requireRole([Role.SUPERADMIN, Role.ADMIN]);
+    if (!auth.ok) return { success: false, error: auth.error };
+
+    const parsed = bulkDeleteTransactionsSchema.safeParse(formData);
+    if (!parsed.success) {
+        return { success: false, error: parsed.error.issues[0]?.message || "Invalid input" };
+    }
+
+    const { transactionIds, expandBookingGroups } = parsed.data;
+
+    try {
+        const targetIds = expandBookingGroups
+            ? await expandTransactionIdsWithBookingGroups(transactionIds)
+            : transactionIds;
+
+        const transactions = await db.transaction.findMany({
+            where: { id: { in: targetIds } },
+            select: { id: true, salesBillNo: true },
+        });
+
+        if (transactions.length !== targetIds.length) {
+            return { success: false, error: "One or more transactions not found" };
+        }
+
+        await db.transaction.deleteMany({ where: { id: { in: targetIds } } });
+
+        await writeAuditLog({
+            userId: auth.session.user.id,
+            userName: auth.session.user.name,
+            action: "BULK_DELETE_TX",
+            entityType: "Transaction",
+            entityId: transactions[0].id,
+            metadata: {
+                count: transactions.length,
+                billNos: transactions.map((t) => t.salesBillNo),
+                transactionIds: transactions.map((t) => t.id),
+            },
+        });
+
+        revalidatePath("/dashboard");
+        revalidatePath("/dashboard/tickets");
+
+        return { success: true, count: transactions.length };
+    } catch (error: unknown) {
+        console.error("Bulk Delete TX Error:", error);
+        const message = publicErrorMessage(error, "Failed to delete transactions");
         return { success: false, error: message };
     }
 }
 
 export async function bulkCreateTransactions(
     rows: unknown[],
-    options?: { revalidate?: boolean; startRowIndex?: number }
+    options?: { revalidate?: boolean; startRowIndex?: number; spreadsheetRow?: number }
 ) {
     const auth = await requireRole([Role.SUPERADMIN, Role.ADMIN]);
     if (!auth.ok) return { success: false, error: auth.error };
@@ -299,7 +446,10 @@ export async function bulkCreateTransactions(
     const errors: { row: number; message: string }[] = [];
 
     for (let i = 0; i < rows.length; i++) {
-        const spreadsheetRow = startRowIndex + i + 2;
+        const spreadsheetRow =
+            rows.length === 1 && options?.spreadsheetRow != null
+                ? options.spreadsheetRow
+                : startRowIndex + i + 2;
         const parsed = transactionSchema.safeParse(rows[i]);
         if (!parsed.success) {
             errors.push({
@@ -320,15 +470,37 @@ export async function bulkCreateTransactions(
             await persistPartnersFromTransaction(parsed.data);
 
             const tx = await db.transaction.create({
-                data: buildTransactionData(parsed.data, {
-                    fiscalYearId: bill.fiscalYearId,
-                    billSequence: bill.billSequence,
-                    salesBillNo: bill.salesBillNo,
-                }),
+                data: {
+                    ...buildTransactionData(parsed.data, {
+                        fiscalYearId: bill.fiscalYearId,
+                        billSequence: bill.billSequence,
+                        salesBillNo: bill.salesBillNo,
+                    }),
+                    purchaseLegs: {
+                        create: [
+                            {
+                                legIndex: 1,
+                                purchaseInvoiceNo: parsed.data.purchaseInvoiceNo,
+                                purchasePartyName: parsed.data.purchasePartyName,
+                                sector: parsed.data.sector,
+                                purchaseDate: parsed.data.purchaseDate
+                                    ? new Date(parsed.data.purchaseDate)
+                                    : null,
+                                purchaseDateBS: parsed.data.purchaseDateBS || null,
+                                travelDate: parsed.data.travelDate
+                                    ? new Date(parsed.data.travelDate)
+                                    : null,
+                                travelDateBS: null,
+                                purchaseAmount: toDecimal(parsed.data.purchaseAmount),
+                                lineSalesAmount: toDecimal(parsed.data.salesAmount),
+                            },
+                        ],
+                    },
+                },
             });
             created.push(tx.salesBillNo);
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Failed to create";
+            const message = publicErrorMessage(error, "Failed to create");
             errors.push({ row: spreadsheetRow, message });
         }
     }

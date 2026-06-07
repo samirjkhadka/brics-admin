@@ -248,6 +248,7 @@ export function isSkippableRow(mapped: Record<string, unknown>): boolean {
 
 export function parseAndValidateRows(rawRows: RawImportRow[]) {
     const validRows: Record<string, unknown>[] = [];
+    const validRowNumbers: number[] = [];
     const errors: ImportRowError[] = [];
 
     rawRows.forEach((raw, index) => {
@@ -268,8 +269,9 @@ export function parseAndValidateRows(rawRows: RawImportRow[]) {
             });
         } else {
             validRows.push(parsed.data);
+            validRowNumbers.push(rowNum);
         }
     });
 
-    return { validRows, errors };
+    return { validRows, validRowNumbers, errors };
 }

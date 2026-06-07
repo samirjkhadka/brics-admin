@@ -9,6 +9,10 @@ import {
     isDateInFiscalYear,
 } from "./nepal-fy";
 import { DEFAULT_BILL_FORMAT, DEFAULT_RECEIPT_FORMAT } from "./bill-format";
+import {
+    findNextAvailableBillSequence,
+    findNextAvailableBillSequences,
+} from "./bill-sequence";
 
 export async function getActiveFinancialYear() {
     return db.financialYear.findFirst({
@@ -73,34 +77,79 @@ export async function resolveFinancialYearForDate(salesDate: Date) {
     });
 }
 
+async function getUsedBillSequences(fiscalYearId: string): Promise<number[]> {
+    const rows = await db.transaction.findMany({
+        where: { fiscalYearId, billSequence: { not: null } },
+        select: { billSequence: true },
+    });
+    return rows.map((row) => row.billSequence!);
+}
+
+export type AllocatedBillNo = {
+    fiscalYearId: string;
+    billSequence: number;
+    salesBillNo: string;
+    billPrefixYear: number;
+};
+
+export async function allocateBillSequences(
+    fiscalYearId: string,
+    count = 1
+): Promise<AllocatedBillNo[]> {
+    const fy = await db.financialYear.findUnique({ where: { id: fiscalYearId } });
+    if (!fy) throw new Error("No active financial year");
+    if (fy.status !== FiscalYearStatus.OPEN) {
+        throw new Error("Cannot create bills in a closed financial year");
+    }
+
+    return db.$transaction(async (tx) => {
+        const rows = await tx.transaction.findMany({
+            where: { fiscalYearId, billSequence: { not: null } },
+            select: { billSequence: true },
+        });
+        const used = rows.map((row) => row.billSequence!);
+        const sequences = findNextAvailableBillSequences(used, count);
+        const maxSeq = sequences[sequences.length - 1];
+
+        await tx.financialYear.update({
+            where: { id: fiscalYearId },
+            data: { nextBillSeq: Math.max(fy.nextBillSeq, maxSeq + 1) },
+        });
+
+        return sequences.map((seq) => ({
+            fiscalYearId: fy.id,
+            billSequence: seq,
+            salesBillNo: formatBillNo(fy.billPrefixYear, seq, fy.billNoFormat),
+            billPrefixYear: fy.billPrefixYear,
+        }));
+    });
+}
+
 export async function allocateNextSalesBillNo(fiscalYearId?: string) {
     const fy = fiscalYearId
         ? await db.financialYear.findUnique({ where: { id: fiscalYearId } })
         : await ensureActiveFinancialYear();
 
     if (!fy) throw new Error("No active financial year");
-    if (fy.status !== FiscalYearStatus.OPEN) {
-        throw new Error("Cannot create bills in a closed financial year");
-    }
 
-    const updated = await db.financialYear.update({
-        where: { id: fy.id },
-        data: { nextBillSeq: { increment: 1 } },
-    });
-
-    const seq = updated.nextBillSeq - 1;
-    return {
-        fiscalYearId: fy.id,
-        billSequence: seq,
-        salesBillNo: formatBillNo(fy.billPrefixYear, seq, fy.billNoFormat),
-        billPrefixYear: fy.billPrefixYear,
-    };
+    const [bill] = await allocateBillSequences(fy.id, 1);
+    return bill;
 }
 
 export async function peekNextSalesBillNo() {
     const fy = await ensureActiveFinancialYear();
     if (!fy) return "";
-    return formatBillNo(fy.billPrefixYear, fy.nextBillSeq, fy.billNoFormat);
+    const used = await getUsedBillSequences(fy.id);
+    const seq = findNextAvailableBillSequence(used);
+    return formatBillNo(fy.billPrefixYear, seq, fy.billNoFormat);
+}
+
+export async function peekSalesBillNos(count: number): Promise<string[]> {
+    const fy = await ensureActiveFinancialYear();
+    if (!fy || count <= 0) return [];
+    const used = await getUsedBillSequences(fy.id);
+    const sequences = findNextAvailableBillSequences(used, count);
+    return sequences.map((seq) => formatBillNo(fy.billPrefixYear, seq, fy.billNoFormat));
 }
 
 export async function allocateNextReceiptNo(fiscalYearId: string) {

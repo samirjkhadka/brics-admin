@@ -43,10 +43,11 @@ describe("transactionSchema", () => {
         expect(result.success).toBe(false);
     });
 
-    it("requires chequeNo when payment is CHEQUE", () => {
+    it("requires chequeNo when payment is CHEQUE and payment is recorded", () => {
         const result = transactionSchema.safeParse({
             ...validBase,
             receivedStatus: PaymentMethod.CHEQUE,
+            amountReceived: 1000,
             chequeNo: "",
         });
         expect(result.success).toBe(false);
@@ -56,6 +57,7 @@ describe("transactionSchema", () => {
         const result = transactionSchema.safeParse({
             ...validBase,
             receivedStatus: PaymentMethod.CHEQUE,
+            amountReceived: 1000,
             chequeNo: "CHQ-12345",
         });
         expect(result.success).toBe(true);

@@ -29,7 +29,7 @@ export default async function DashboardLayout({
                 userName={session.user.name}
                 userEmail={session.user.email}
             />
-            <main className="flex-1 overflow-auto p-8">{children}</main>
+            <main className="flex-1 overflow-auto p-8 print:p-0">{children}</main>
         </div>
     );
 }

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import * as XLSX from "xlsx";
+import { Role } from "@prisma/client";
 import { startOfMonth, endOfMonth } from "date-fns";
+import { requireApiRole } from "@/lib/security/api-auth";
+import { sanitizeSpreadsheetRow } from "@/lib/security/sanitize-export-cell";
 
 export async function GET(req: NextRequest) {
+    const auth = await requireApiRole([Role.SUPERADMIN, Role.ADMIN]);
+    if (!auth.ok) return auth.response;
     const { searchParams } = new URL(req.url);
     const year = parseInt(searchParams.get("year") || String(new Date().getFullYear()), 10);
     const month = parseInt(searchParams.get("month") || String(new Date().getMonth()), 10);
@@ -13,20 +18,23 @@ export async function GET(req: NextRequest) {
 
     const transactions = await db.transaction.findMany({
         where: { isVoided: false, salesDate: { gte: start, lte: end } },
-        orderBy: { salesDate: "asc" },
+        orderBy: [{ billSequence: "desc" }, { salesBillNo: "desc" }],
     });
 
-    const rows = transactions.map((tx) => ({
-        "Sales Bill No": tx.salesBillNo,
-        "Party": tx.partyName,
-        "Sales Date": tx.salesDate.toISOString().split("T")[0],
-        "Sales Amount": Number(tx.salesAmount),
-        "Purchase Amount": Number(tx.purchaseAmount),
-        "Exempt": Number(tx.exemptAmount),
-        "Taxable": Number(tx.taxableAmount),
-        "Output VAT": Number(tx.vatAmount),
-        "Net Profit": Number(tx.salesAmount) - Number(tx.purchaseAmount),
-    }));
+    const rows = transactions.map((tx) =>
+        sanitizeSpreadsheetRow({
+            "S.N.": tx.billSequence ?? "",
+            "Sales Bill No": tx.salesBillNo,
+            Party: tx.partyName,
+            "Sales Date": tx.salesDate.toISOString().split("T")[0],
+            "Sales Amount": Number(tx.salesAmount),
+            "Purchase Amount": Number(tx.purchaseAmount),
+            Exempt: Number(tx.exemptAmount),
+            Taxable: Number(tx.taxableAmount),
+            "Output VAT": Number(tx.vatAmount),
+            "Net Profit": Number(tx.salesAmount) - Number(tx.purchaseAmount),
+        })
+    );
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();

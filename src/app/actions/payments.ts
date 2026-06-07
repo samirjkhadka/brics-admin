@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { PaymentMethod, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
+import { publicErrorMessage } from "@/lib/security/sanitize-error";
 import { writeAuditLog } from "@/lib/audit/log";
 import { allocateNextReceiptNo } from "@/lib/fiscal-year/service";
 import { adStringToBs } from "@/lib/utils/nepali-calendar";
@@ -163,7 +164,7 @@ export async function bulkRecordPayment(formData: unknown) {
             },
         };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to record payment";
+        const message = publicErrorMessage(error, "Failed to record payment");
         return { success: false, error: message };
     }
 }

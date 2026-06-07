@@ -6,6 +6,14 @@ import {
     shouldUseCompactPassengerDisplay,
     formatCompactPassengerDisplay,
 } from "@/lib/utils/parse-passengers";
+import { buildInvoiceLineItems } from "@/lib/booking/helpers";
+
+type InvoiceLeg = {
+    sector: string;
+    lineSalesAmount: { toString(): string } | number;
+    exemptAmount?: { toString(): string } | number;
+    travelDate?: Date | null;
+};
 
 type InvoiceTransaction = {
     passengerNames: string;
@@ -14,6 +22,7 @@ type InvoiceTransaction = {
     salesBillNo: string;
     salesDate: Date;
     travelDate: Date | null;
+    salesAmount: { toString(): string } | number;
     taxableAmount: { toString(): string } | number;
     vatAmount: { toString(): string } | number;
     exemptAmount: { toString(): string } | number;
@@ -21,6 +30,7 @@ type InvoiceTransaction = {
     contactNo: string | null;
     chequeNo: string | null;
     hsCode: string | null;
+    purchaseLegs?: InvoiceLeg[];
 };
 
 export default function InvoiceDocument({
@@ -30,18 +40,32 @@ export default function InvoiceDocument({
     tx: InvoiceTransaction;
     variant: "proforma" | "tax";
 }) {
+    const salesAmount = Number(tx.salesAmount);
     const taxable = Number(tx.taxableAmount);
     const vat = Number(tx.vatAmount);
     const exempt = Number(tx.exemptAmount);
-    const grandTotal = taxable + vat + exempt;
+    const grandTotal = salesAmount || taxable + vat + exempt;
     const amountInWords = numberToWords(Math.round(grandTotal * 100) / 100);
     const passengers = parsePassengers(tx.passengerNames);
     const paxCount = Math.max(passengers.length, 1);
     const compactPassengers = shouldUseCompactPassengerDisplay(passengers);
     const guestLine = formatInvoiceGuestLine(passengers, tx.passengerNames);
-    const companyVatNo = process.env.COMPANY_VAT_NO || "612345678";
+    const companyVatNo = process.env.COMPANY_VAT_NO?.trim() || "";
     const title = variant === "tax" ? "TAX INVOICE" : "PERFORMA INVOICE";
     const showWatermark = variant === "proforma";
+
+    const legSource =
+        tx.purchaseLegs && tx.purchaseLegs.length > 0
+            ? tx.purchaseLegs.map((leg) => ({
+                  sector: leg.sector,
+                  lineSalesAmount: Number(leg.lineSalesAmount),
+                  exemptAmount: Number(leg.exemptAmount ?? 0),
+                  travelDate: leg.travelDate ?? null,
+              }))
+            : [{ sector: tx.sector, lineSalesAmount: grandTotal, travelDate: tx.travelDate }];
+
+    const lineItems = buildInvoiceLineItems(legSource, exempt);
+    const multiLeg = legSource.length > 1;
 
     return (
         <div className="w-full max-w-[800px] border border-slate-200 shadow-xl mx-auto bg-white p-8 font-serif text-black text-sm print:p-4 print:border-0 print:shadow-none relative overflow-hidden">
@@ -162,54 +186,70 @@ export default function InvoiceDocument({
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td className="border-l border-r border-foreground px-2 py-3 align-top font-bold text-center">
-                            1
-                        </td>
-                        <td className="border-l border-r border-foreground px-2 py-3 align-top">
-                            <div className="space-y-4">
-                                <div>
-                                    <p className="font-black text-sm uppercase">Sector: {tx.sector}</p>
-                                    <p className="text-xs text-slate-600 font-bold">
-                                        Flight Date: {tx.travelDate?.toLocaleDateString()}
+                    {lineItems.map((line, index) => (
+                        <tr key={`${line.sector}-${index}`}>
+                            <td className="border-l border-r border-foreground px-2 py-3 align-top font-bold text-center">
+                                {index + 1}
+                            </td>
+                            <td className="border-l border-r border-foreground px-2 py-2 align-top">
+                                <div className="space-y-1 text-[9px] leading-snug">
+                                    <p className="font-black uppercase text-slate-900">
+                                        Sector: {line.sector}
                                     </p>
-                                </div>
-                                <div className="space-y-2">
-                                    <p className="text-xs font-bold uppercase border-b border-slate-100 pb-1">
-                                        No of Pax: {paxCount} · Passengers
+                                    {multiLeg && tx.sector && (
+                                        <p className="font-bold text-slate-600">
+                                            Full route: {tx.sector}
+                                        </p>
+                                    )}
+                                    <p className="font-bold text-slate-700">
+                                        Flight date:{" "}
+                                        {(
+                                            legSource[index]?.travelDate ?? tx.travelDate
+                                        )?.toLocaleDateString() ?? "—"}
                                     </p>
-                                    {compactPassengers ? (
-                                        <div className="pl-2 border-l-2 border-slate-100">
-                                            <p className="font-black text-slate-800 uppercase">
-                                                {formatCompactPassengerDisplay(passengers, tx.passengerNames)}
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        passengers.map((p, idx) => (
-                                            <div key={idx} className="pl-2 border-l-2 border-slate-100">
-                                                <p className="font-black text-slate-800">{p.name}</p>
-                                                <p className="text-[10px] text-slate-500 font-bold tracking-tight">
-                                                    Ticket NO: {p.ticketNo || "N/A"}
+                                    {index === 0 && (
+                                        <div className="pt-0.5 border-t border-slate-100">
+                                            {paxCount > 1 && (
+                                                <p className="font-black uppercase text-slate-500">
+                                                    No of Pax: {paxCount}
                                                 </p>
-                                            </div>
-                                        ))
+                                            )}
+                                            {compactPassengers ? (
+                                                <p className="font-bold text-slate-800 uppercase">
+                                                    {formatCompactPassengerDisplay(
+                                                        passengers,
+                                                        tx.passengerNames
+                                                    )}
+                                                </p>
+                                            ) : (
+                                                passengers.map((p, idx) => (
+                                                    <p key={idx} className="font-bold text-slate-800">
+                                                        {p.name}
+                                                        <span className="text-slate-500 font-semibold">
+                                                            {" "}
+                                                            · Ticket No: {p.ticketNo || "N/A"}
+                                                        </span>
+                                                    </p>
+                                                ))
+                                            )}
+                                        </div>
                                     )}
                                 </div>
-                            </div>
-                        </td>
-                        <td className="border-l border-r border-foreground px-2 py-3 align-top text-center font-bold">
-                            {passengers.length}
-                        </td>
-                        <td className="border-l border-r border-foreground px-2 py-3 align-top text-right font-bold">
-                            {formatNumber((taxable + exempt) / passengers.length)}
-                        </td>
-                        <td className="border-l border-r border-foreground px-2 py-3 align-top text-right font-bold">
-                            {formatNumber(taxable)}
-                        </td>
-                        <td className="border-l border-r border-foreground px-2 py-3 align-top text-right font-bold">
-                            {formatNumber(exempt)}
-                        </td>
-                    </tr>
+                            </td>
+                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-center font-bold">
+                                {paxCount}
+                            </td>
+                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-center">
+                                &nbsp;
+                            </td>
+                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-right font-bold">
+                                {formatNumber(line.taxableAmount)}
+                            </td>
+                            <td className="border-l border-r border-foreground px-2 py-3 align-top text-right font-bold">
+                                {formatNumber(line.exemptAmount)}
+                            </td>
+                        </tr>
+                    ))}
 
                     <tr className="border-t border-foreground">
                         <td colSpan={3} className="border border-foreground px-4 py-3 text-sm align-top italic" rowSpan={5}>

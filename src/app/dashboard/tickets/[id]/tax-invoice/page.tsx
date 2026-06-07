@@ -8,7 +8,10 @@ import { PaymentStatus } from "@prisma/client";
 
 export default async function TaxInvoicePage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
-    const tx = await db.transaction.findUnique({ where: { id } });
+    const tx = await db.transaction.findUnique({
+        where: { id },
+        include: { purchaseLegs: { orderBy: { legIndex: "asc" } } },
+    });
     if (!tx) notFound();
 
     const isPaid = tx.paymentStatus === PaymentStatus.PAID;

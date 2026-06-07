@@ -10,5 +10,7 @@ export const config = {
     matcher: [
         "/dashboard/:path*",
         "/api/export/:path*",
+        "/api/import/:path*",
+        "/api/templates/:path*",
     ],
 };

@@ -4,16 +4,21 @@ import { notFound } from "next/navigation";
 import TicketEntryForm from "@/components/tickets/ticket-form";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { RoleGate } from "@/components/auth/role-gate";
+import { enforcePageRole, RoleGate } from "@/components/auth/role-gate";
 
 export default async function EditTransactionPage({
     params,
 }: {
     params: Promise<{ id: string }>;
 }) {
+    await enforcePageRole([Role.SUPERADMIN, Role.ADMIN]);
+
     const { id } = await params;
     const [tx, partners] = await Promise.all([
-        db.transaction.findUnique({ where: { id } }),
+        db.transaction.findUnique({
+            where: { id },
+            include: { purchaseLegs: { orderBy: { legIndex: "asc" } } },
+        }),
         db.partner.findMany({
             where: { isActive: true },
             orderBy: { name: "asc" },
@@ -47,6 +52,12 @@ export default async function EditTransactionPage({
                         purchaseAmount: Number(tx.purchaseAmount),
                         salesAmount: Number(tx.salesAmount),
                         exemptAmount: Number(tx.exemptAmount),
+                        purchaseLegs: tx.purchaseLegs.map((leg) => ({
+                            ...leg,
+                            purchaseAmount: Number(leg.purchaseAmount),
+                            lineSalesAmount: Number(leg.lineSalesAmount),
+                            exemptAmount: Number(leg.exemptAmount),
+                        })),
                     })
                 )}
             />

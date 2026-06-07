@@ -78,41 +78,53 @@ function formatReferenceCell(line: PartyLedgerLine) {
 
 export default function LedgerDetailTable({ lines }: { lines: PartyLedgerLine[] }) {
     return (
-        <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse border border-slate-300 mb-6 min-w-[720px]">
+        <div className="overflow-x-auto print:overflow-visible">
+            <table className="w-full text-sm print:text-[9px] border-collapse border border-slate-300 mb-6 min-w-[720px] print:min-w-0 print:w-full table-fixed">
                 <thead>
-                    <tr className="bg-slate-100 text-[10px] uppercase tracking-wide">
-                        <th className="border border-slate-300 px-2 py-2 text-left whitespace-nowrap">Date (BS)</th>
-                        <th className="border border-slate-300 px-2 py-2 text-left whitespace-nowrap">Date (AD)</th>
-                        <th className="border border-slate-300 px-2 py-2 text-left">Voucher Type</th>
-                        <th className="border border-slate-300 px-2 py-2 text-left min-w-[200px]">Reference</th>
-                        <th className="border border-slate-300 px-2 py-2 text-right whitespace-nowrap">Debit</th>
-                        <th className="border border-slate-300 px-2 py-2 text-right whitespace-nowrap">Credit</th>
-                        <th className="border border-slate-300 px-2 py-2 text-right whitespace-nowrap">Balance</th>
+                    <tr className="bg-slate-100 text-[10px] print:text-[8px] uppercase tracking-wide">
+                        <th className="border border-slate-300 px-2 py-2 print:px-1 print:py-1 text-left whitespace-nowrap w-[14%]">
+                            Date (BS)
+                        </th>
+                        <th className="border border-slate-300 px-2 py-2 print:px-1 print:py-1 text-left whitespace-nowrap print:hidden w-[12%]">
+                            Date (AD)
+                        </th>
+                        <th className="border border-slate-300 px-2 py-2 print:px-1 print:py-1 text-left w-[12%]">Type</th>
+                        <th className="border border-slate-300 px-2 py-2 print:px-1 print:py-1 text-left min-w-[200px] print:min-w-0 w-[34%]">
+                            Reference
+                        </th>
+                        <th className="border border-slate-300 px-2 py-2 print:px-1 print:py-1 text-right whitespace-nowrap w-[12%]">
+                            Debit
+                        </th>
+                        <th className="border border-slate-300 px-2 py-2 print:px-1 print:py-1 text-right whitespace-nowrap w-[12%]">
+                            Credit
+                        </th>
+                        <th className="border border-slate-300 px-2 py-2 print:px-1 print:py-1 text-right whitespace-nowrap w-[14%]">
+                            Balance
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
                     {lines.map((line, i) => (
-                        <tr key={i}>
-                            <td className="border border-slate-300 px-2 py-1.5 whitespace-nowrap text-slate-700">
+                        <tr key={i} className="print:break-inside-avoid">
+                            <td className="border border-slate-300 px-2 py-1.5 print:px-1 print:py-0.5 whitespace-nowrap text-slate-700">
                                 {line.dateBS}
                             </td>
-                            <td className="border border-slate-300 px-2 py-1.5 whitespace-nowrap">
+                            <td className="border border-slate-300 px-2 py-1.5 print:px-1 print:py-0.5 whitespace-nowrap print:hidden">
                                 {line.voucherType === "Opening" ? "—" : line.date.toLocaleDateString()}
                             </td>
-                            <td className="border border-slate-300 px-2 py-1.5 font-semibold whitespace-nowrap">
+                            <td className="border border-slate-300 px-2 py-1.5 print:px-1 print:py-0.5 font-semibold whitespace-nowrap">
                                 {line.voucherType}
                             </td>
-                            <td className="border border-slate-300 px-2 py-1.5 align-top">
+                            <td className="border border-slate-300 px-2 py-1.5 print:px-1 print:py-0.5 align-top print:text-[8px] break-words">
                                 {formatReferenceCell(line)}
                             </td>
-                            <td className="border border-slate-300 px-2 py-1.5 text-right whitespace-nowrap">
+                            <td className="border border-slate-300 px-2 py-1.5 print:px-1 print:py-0.5 text-right whitespace-nowrap">
                                 {line.debit ? formatNPR(line.debit) : ""}
                             </td>
-                            <td className="border border-slate-300 px-2 py-1.5 text-right whitespace-nowrap">
+                            <td className="border border-slate-300 px-2 py-1.5 print:px-1 print:py-0.5 text-right whitespace-nowrap">
                                 {line.credit ? formatNPR(line.credit) : ""}
                             </td>
-                            <td className="border border-slate-300 px-2 py-1.5 text-right font-semibold whitespace-nowrap">
+                            <td className="border border-slate-300 px-2 py-1.5 print:px-1 print:py-0.5 text-right font-semibold whitespace-nowrap">
                                 {formatNPR(line.balance)}
                             </td>
                         </tr>

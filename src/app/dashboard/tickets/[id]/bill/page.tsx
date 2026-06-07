@@ -7,7 +7,10 @@ import InvoiceDocument from "@/components/tickets/invoice-document";
 
 export default async function BillPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
-    const tx = await db.transaction.findUnique({ where: { id } });
+    const tx = await db.transaction.findUnique({
+        where: { id },
+        include: { purchaseLegs: { orderBy: { legIndex: "asc" } } },
+    });
     if (!tx) notFound();
 
     return (

@@ -381,9 +381,14 @@ export async function getPartyLedgerLines(
 }
 
 export async function getSupplierStatement(fiscalYearId: string): Promise<SupplierStatementRow[]> {
-    const [transactions, refunds] = await Promise.all([
-        db.transaction.findMany({
-            where: { fiscalYearId, isVoided: false },
+    const [purchaseLegs, refunds] = await Promise.all([
+        db.purchaseLeg.findMany({
+            where: { transaction: { fiscalYearId, isVoided: false } },
+            select: {
+                purchasePartyName: true,
+                purchaseAmount: true,
+                purchaseInvoiceNo: true,
+            },
         }),
         db.refund.findMany({
             where: { fiscalYearId },
@@ -394,10 +399,10 @@ export async function getSupplierStatement(fiscalYearId: string): Promise<Suppli
     ]);
 
     const map = new Map<string, { purchase: number; count: number; creditNotes: number }>();
-    for (const t of transactions) {
-        const key = t.purchasePartyName || "Unspecified";
+    for (const leg of purchaseLegs) {
+        const key = leg.purchasePartyName || "Unspecified";
         const cur = map.get(key) || { purchase: 0, count: 0, creditNotes: 0 };
-        cur.purchase += Number(t.purchaseAmount);
+        cur.purchase += Number(leg.purchaseAmount);
         cur.count += 1;
         map.set(key, cur);
     }

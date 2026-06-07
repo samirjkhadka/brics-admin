@@ -1,8 +1,10 @@
 import db from "@/lib/db";
-import { RoleGate } from "@/components/auth/role-gate";
+import { enforcePageRole, RoleGate } from "@/components/auth/role-gate";
 import { Role } from "@prisma/client";
 
 export default async function AuditPage() {
+    await enforcePageRole([Role.SUPERADMIN]);
+
     const logs = await db.auditLog.findMany({
         orderBy: { createdAt: "desc" },
         take: 200,

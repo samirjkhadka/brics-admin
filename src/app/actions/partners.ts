@@ -5,48 +5,7 @@ import { revalidatePath } from "next/cache";
 import { PartnerType, Role } from "@prisma/client";
 import { requireRole } from "@/lib/auth/session";
 import { partnerSchema } from "@/lib/validations/partner";
-
-const PLACEHOLDER_SKIP = new Set(["", "unspecified", "legacy import", "not specified"]);
-
-/** Create or update a partner when entered via ticket form (custom combobox name). */
-export async function upsertPartnerFromTicketEntry(data: {
-    name: string;
-    type: PartnerType;
-    vatNo?: string | null;
-    contactNo?: string | null;
-}) {
-    const name = data.name.trim();
-    if (!name || PLACEHOLDER_SKIP.has(name.toLowerCase())) return;
-
-    const existing = await db.partner.findUnique({
-        where: { name_type: { name, type: data.type } },
-    });
-
-    if (existing) {
-        await db.partner.update({
-            where: { id: existing.id },
-            data: {
-                isActive: true,
-                ...(data.vatNo?.trim() ? { vatNo: data.vatNo.trim() } : {}),
-                ...(data.contactNo?.trim() ? { contactNo: data.contactNo.trim() } : {}),
-            },
-        });
-        return;
-    }
-
-    await db.partner.create({
-        data: {
-            name,
-            type: data.type,
-            vatNo: data.vatNo?.trim() || null,
-            contactNo: data.contactNo?.trim() || null,
-            bankName: "Pending",
-            accountNumber: "Pending",
-        },
-    });
-
-    revalidatePath("/dashboard/partners");
-}
+import { publicErrorMessage } from "@/lib/security/sanitize-error";
 
 export async function listPartnersForEntry() {
     const auth = await requireRole([Role.SUPERADMIN, Role.ADMIN]);
@@ -66,7 +25,7 @@ export async function listPartnersForEntry() {
         });
         return { success: true, data: partners };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to list partners";
+        const message = publicErrorMessage(error, "Failed to list partners");
         return { success: false, error: message };
     }
 }
@@ -81,7 +40,7 @@ export async function listPartners() {
         });
         return { success: true, data: partners };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to list partners";
+        const message = publicErrorMessage(error, "Failed to list partners");
         return { success: false, error: message };
     }
 }
@@ -106,7 +65,7 @@ export async function createPartner(formData: unknown) {
         revalidatePath("/dashboard/partners");
         return { success: true, data: partner };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to create partner";
+        const message = publicErrorMessage(error, "Failed to create partner");
         return { success: false, error: message };
     }
 }
@@ -133,7 +92,44 @@ export async function updatePartner(id: string, formData: unknown) {
         revalidatePath(`/dashboard/partners/${id}/edit`);
         return { success: true, data: partner };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to update partner";
+        const message = publicErrorMessage(error, "Failed to update partner");
+        return { success: false, error: message };
+    }
+}
+
+export async function deletePartner(id: string) {
+    const auth = await requireRole([Role.SUPERADMIN]);
+    if (!auth.ok) return { success: false, error: auth.error };
+
+    try {
+        const partner = await db.partner.findUnique({ where: { id } });
+        if (!partner) return { success: false, error: "Partner not found" };
+
+        await db.partner.delete({ where: { id } });
+
+        revalidatePath("/dashboard/partners");
+        return { success: true };
+    } catch (error: unknown) {
+        const message = publicErrorMessage(error, "Failed to delete partner");
+        return { success: false, error: message };
+    }
+}
+
+export async function bulkDeletePartners(ids: string[]) {
+    const auth = await requireRole([Role.SUPERADMIN]);
+    if (!auth.ok) return { success: false, error: auth.error };
+
+    if (!ids.length) return { success: false, error: "No partners selected" };
+
+    try {
+        const result = await db.partner.deleteMany({
+            where: { id: { in: ids } },
+        });
+
+        revalidatePath("/dashboard/partners");
+        return { success: true, count: result.count };
+    } catch (error: unknown) {
+        const message = publicErrorMessage(error, "Failed to delete partners");
         return { success: false, error: message };
     }
 }
@@ -151,7 +147,38 @@ export async function deactivatePartner(id: string) {
         revalidatePath("/dashboard/partners");
         return { success: true };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to deactivate partner";
+        const message = publicErrorMessage(error, "Failed to deactivate partner");
+        return { success: false, error: message };
+    }
+}
+
+export async function getCustomerTicketDefaults(partnerId: string) {
+    const auth = await requireRole([Role.SUPERADMIN, Role.ADMIN]);
+    if (!auth.ok) return { success: false, error: auth.error };
+
+    try {
+        const partner = await db.partner.findUnique({
+            where: { id: partnerId, type: PartnerType.CUSTOMER },
+            select: { id: true, name: true, vatNo: true, contactNo: true },
+        });
+        if (!partner) return { success: false, error: "Customer not found" };
+
+        const lastTx = await db.transaction.findFirst({
+            where: { partyName: partner.name, isVoided: false },
+            orderBy: { createdAt: "desc" },
+            select: { partyVatNo: true, contactNo: true, hsCode: true },
+        });
+
+        return {
+            success: true,
+            data: {
+                partyVatNo: partner.vatNo || lastTx?.partyVatNo || "",
+                contactNo: partner.contactNo || lastTx?.contactNo || "",
+                hsCode: lastTx?.hsCode || "",
+            },
+        };
+    } catch (error: unknown) {
+        const message = publicErrorMessage(error, "Failed to load customer details");
         return { success: false, error: message };
     }
 }
@@ -167,7 +194,7 @@ export async function getPartnerById(id: string) {
         }
         return { success: true, data: partner };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to fetch partner";
+        const message = publicErrorMessage(error, "Failed to fetch partner");
         return { success: false, error: message };
     }
 }

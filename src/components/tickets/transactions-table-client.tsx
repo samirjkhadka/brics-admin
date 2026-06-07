@@ -11,17 +11,20 @@ import {
     Pencil,
     Trash2,
     Banknote,
+    Ban,
     X,
     ArrowUpDown,
     ArrowUp,
     ArrowDown,
 } from "lucide-react";
 import BulkPaymentModal from "@/components/tickets/bulk-payment-modal";
+import BulkVoidModal from "@/components/tickets/bulk-void-modal";
 import Link from "next/link";
 import { formatNumber } from "@/lib/utils/format-currency";
-import { isPurchasePartyUnset } from "@/lib/utils/purchase-party";
+import { isOwnSalesBill, isPurchasePartyUnset } from "@/lib/utils/purchase-party";
+import { displayPaymentMethod } from "@/lib/utils/payment-status";
 import { formatPassengerNames } from "@/lib/utils/parse-passengers";
-import { deleteTransaction } from "@/app/actions/transactions";
+import { deleteTransaction, bulkDeleteTransactions } from "@/app/actions/transactions";
 import { VoidTransactionButton } from "@/components/tickets/void-transaction-button";
 import { RefundTransactionButton } from "@/components/tickets/refund-transaction-button";
 import { useRouter } from "next/navigation";
@@ -32,6 +35,7 @@ interface Transaction {
     partyName: string;
     purchasePartyName: string;
     sector: string;
+    billSequence: number | null;
     salesBillNo: string;
     salesDate: string;
     salesDateBS: string;
@@ -57,13 +61,17 @@ interface Transaction {
     priorCustomerRefund: number;
     priorSupplierCredit: number;
     priorCashRefund: number;
+    billingMode?: string;
+    bookingGroupId?: string | null;
 }
 
 type DateFieldFilter = "sales" | "travel";
 
 type SortKey =
+    | "billSequence"
     | "salesDate"
     | "travelDate"
+    | "purchaseDate"
     | "passengerNames"
     | "partyName"
     | "salesBillNo"
@@ -95,12 +103,23 @@ function compareSortValue(a: string | number | null, b: string | number | null, 
 
 function compareTransactions(a: Transaction, b: Transaction, key: SortKey, dir: SortDir): number {
     switch (key) {
+        case "billSequence": {
+            const seq = compareSortValue(a.billSequence, b.billSequence, dir);
+            if (seq !== 0) return seq;
+            return compareSortValue(a.salesBillNo, b.salesBillNo, dir);
+        }
         case "salesDate":
             return compareSortValue(new Date(a.salesDate).getTime(), new Date(b.salesDate).getTime(), dir);
         case "travelDate":
             return compareSortValue(
                 a.travelDate ? new Date(a.travelDate).getTime() : null,
                 b.travelDate ? new Date(b.travelDate).getTime() : null,
+                dir
+            );
+        case "purchaseDate":
+            return compareSortValue(
+                a.purchaseDate ? new Date(a.purchaseDate).getTime() : null,
+                b.purchaseDate ? new Date(b.purchaseDate).getTime() : null,
                 dir
             );
         case "netProfit":
@@ -211,6 +230,9 @@ export default function TransactionsTableClient({
     const [purchaseFromFilter, setPurchaseFromFilter] = useState(initialPurchaseFromFilter);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showVoidModal, setShowVoidModal] = useState(false);
+    const [bulkActionLoading, setBulkActionLoading] = useState(false);
+    const [expandBookingGroups, setExpandBookingGroups] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
     const [filterType, setFilterType] = useState<"ALL" | "MONTH" | "YEAR" | "CUSTOM">("ALL");
     const [dateFieldFilter, setDateFieldFilter] = useState<DateFieldFilter>("sales");
@@ -221,7 +243,7 @@ export default function TransactionsTableClient({
     const [billNoFrom, setBillNoFrom] = useState("");
     const [billNoTo, setBillNoTo] = useState("");
     const [paymentFilter, setPaymentFilter] = useState<"ALL" | "UNPAID" | "PARTIAL" | "PAID">("ALL");
-    const [sortKey, setSortKey] = useState<SortKey>("salesDate");
+    const [sortKey, setSortKey] = useState<SortKey>("billSequence");
     const [sortDir, setSortDir] = useState<SortDir>("desc");
     const [itemsPerPage, setItemsPerPage] = useState(15);
 
@@ -233,6 +255,37 @@ export default function TransactionsTableClient({
             } else {
                 alert(res.error || "Failed to delete transaction");
             }
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedTransactions.length === 0) return;
+        const billList = selectedTransactions.map((tx) => tx.salesBillNo).join(", ");
+        const preview =
+            selectedTransactions.length <= 5
+                ? billList
+                : `${selectedTransactions
+                      .slice(0, 5)
+                      .map((tx) => tx.salesBillNo)
+                      .join(", ")} and ${selectedTransactions.length - 5} more`;
+        if (
+            !confirm(
+                `Delete ${selectedTransactions.length} transaction(s)?\n\n${preview}\n\nThis cannot be undone.`
+            )
+        ) {
+            return;
+        }
+        setBulkActionLoading(true);
+        const res = await bulkDeleteTransactions({
+            transactionIds: selectedTransactions.map((tx) => tx.id),
+            expandBookingGroups,
+        });
+        setBulkActionLoading(false);
+        if (res.success) {
+            setSelectedIds(new Set());
+            router.refresh();
+        } else {
+            alert(res.error || "Failed to delete transactions");
         }
     };
 
@@ -334,6 +387,16 @@ export default function TransactionsTableClient({
         [selectedTransactions]
     );
 
+    const voidableSelected = useMemo(
+        () => selectedTransactions.filter((tx) => !tx.isVoided),
+        [selectedTransactions]
+    );
+
+    const hasLinkedSelection = useMemo(
+        () => selectedTransactions.some((tx) => Boolean(tx.bookingGroupId)),
+        [selectedTransactions]
+    );
+
     const toggleSelect = (id: string) => {
         setSelectedIds((prev) => {
             const next = new Set(prev);
@@ -414,14 +477,12 @@ export default function TransactionsTableClient({
             setSortDir((d) => (d === "asc" ? "desc" : "asc"));
         } else {
             setSortKey(key);
-            setSortDir("asc");
+            setSortDir(key === "billSequence" || key === "salesBillNo" ? "desc" : "asc");
         }
     };
 
     const toggleSelectAllPage = () => {
-        const pageIds = paginatedData
-            .filter((tx) => !tx.isVoided && tx.paymentStatus !== "PAID")
-            .map((tx) => tx.id);
+        const pageIds = paginatedData.map((tx) => tx.id);
         const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
         setSelectedIds((prev) => {
             const next = new Set(prev);
@@ -479,7 +540,18 @@ export default function TransactionsTableClient({
                             </span>
                         )}
                     </span>
-                    <div className="flex gap-2">
+                    {hasLinkedSelection && (
+                        <label className="flex items-center gap-2 text-xs text-violet-700 mr-2">
+                            <input
+                                type="checkbox"
+                                checked={expandBookingGroups}
+                                onChange={(e) => setExpandBookingGroups(e.target.checked)}
+                                className="rounded border-violet-300"
+                            />
+                            Include linked booking group
+                        </label>
+                    )}
+                    <div className="flex flex-wrap gap-2">
                         <button
                             type="button"
                             onClick={() => setSelectedIds(new Set())}
@@ -495,6 +567,22 @@ export default function TransactionsTableClient({
                         >
                             <Banknote size={14} /> Mark as Paid
                         </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowVoidModal(true)}
+                            disabled={voidableSelected.length === 0}
+                            className="inline-flex items-center gap-2 px-4 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                        >
+                            <Ban size={14} /> Void Selected
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleBulkDelete}
+                            disabled={bulkActionLoading}
+                            className="inline-flex items-center gap-2 px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                        >
+                            <Trash2 size={14} /> Delete Selected
+                        </button>
                     </div>
                 </div>
             )}
@@ -504,6 +592,18 @@ export default function TransactionsTableClient({
                     selected={payableSelected}
                     onClose={() => setShowPaymentModal(false)}
                     onSuccess={() => {
+                        setSelectedIds(new Set());
+                        router.refresh();
+                    }}
+                />
+            )}
+
+            {showVoidModal && voidableSelected.length > 0 && (
+                <BulkVoidModal
+                    selected={selectedTransactions}
+                    onClose={() => setShowVoidModal(false)}
+                    onSuccess={() => {
+                        setShowVoidModal(false);
                         setSelectedIds(new Set());
                         router.refresh();
                     }}
@@ -716,17 +816,19 @@ export default function TransactionsTableClient({
                                         <input
                                             type="checkbox"
                                             onChange={toggleSelectAllPage}
-                                            title="Select unpaid on this page"
+                                            title="Select all on this page"
                                             className="rounded border-slate-300"
                                         />
                                     </th>
                                 )}
-                                <SortableHeader label="Sales Date (AD/BS)" sortKeyName="salesDate" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
-                                <SortableHeader label="Travel Date (AD/BS)" sortKeyName="travelDate" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
-                                <SortableHeader label="Passenger(s)" sortKeyName="passengerNames" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
-                                <SortableHeader label="Party" sortKeyName="partyName" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
+                                <SortableHeader label="S.N." sortKeyName="billSequence" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} align="center" />
                                 <SortableHeader label="Bill No" sortKeyName="salesBillNo" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
                                 <SortableHeader label="Purchase Inv. No" sortKeyName="purchaseInvoiceNo" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
+                                <SortableHeader label="Purchase Bill Date" sortKeyName="purchaseDate" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
+                                <SortableHeader label="Travel Date" sortKeyName="travelDate" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
+                                <SortableHeader label="Sales Date" sortKeyName="salesDate" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
+                                <SortableHeader label="Passenger(s)" sortKeyName="passengerNames" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
+                                <SortableHeader label="Party" sortKeyName="partyName" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
                                 <SortableHeader label="Sector" sortKeyName="sector" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} />
                                 <SortableHeader label="Purchase Amt" sortKeyName="purchaseAmount" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} align="right" />
                                 <SortableHeader label="Sale Amt" sortKeyName="salesAmount" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} align="right" />
@@ -740,7 +842,13 @@ export default function TransactionsTableClient({
                         <tbody className="divide-y divide-slate-100">
                             {paginatedData.map((tx) => {
                                 const netProfit = tx.salesAmount - tx.purchaseAmount;
-                                const supplierMissing = isPurchasePartyUnset(tx.purchasePartyName);
+                                const ownSales = isOwnSalesBill(tx);
+                                const supplierMissing =
+                                    !ownSales && isPurchasePartyUnset(tx.purchasePartyName);
+                                const paymentMethodLabel = displayPaymentMethod(
+                                    tx.receivedStatus,
+                                    tx.paymentStatus
+                                );
                                 return (
                                     <tr
                                         key={tx.id}
@@ -757,21 +865,39 @@ export default function TransactionsTableClient({
                                     >
                                         {canEdit && (
                                             <td className="px-3 py-3">
-                                                {!tx.isVoided && tx.paymentStatus !== "PAID" && (
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedIds.has(tx.id)}
-                                                        onChange={() => toggleSelect(tx.id)}
-                                                        className="rounded border-slate-300"
-                                                    />
-                                                )}
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedIds.has(tx.id)}
+                                                    onChange={() => toggleSelect(tx.id)}
+                                                    className="rounded border-slate-300"
+                                                />
                                             </td>
                                         )}
+                                        <td className="px-4 py-3 text-center text-slate-600 font-mono text-xs font-bold whitespace-nowrap">
+                                            {tx.billSequence ?? "—"}
+                                        </td>
+                                        <td className="px-4 py-3 text-brand-red font-mono text-xs font-bold whitespace-nowrap">
+                                            <div>{tx.salesBillNo}</div>
+                                            {tx.bookingGroupId && tx.billingMode === "SPLIT" && (
+                                                <span className="text-[9px] font-bold uppercase text-violet-600">
+                                                    Linked
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-500 font-mono text-xs truncate max-w-[120px]" title={tx.purchaseInvoiceNo}>
+                                            {tx.purchaseInvoiceNo || "—"}
+                                        </td>
                                         <td className="px-4 py-3 whitespace-nowrap">
-                                            <div className="text-slate-900 font-medium">
-                                                {new Date(tx.salesDate).toLocaleDateString()}
-                                            </div>
-                                            <div className="text-[10px] text-slate-400">{tx.salesDateBS}</div>
+                                            {tx.purchaseDate ? (
+                                                <>
+                                                    <div className="text-slate-900 font-medium">
+                                                        {new Date(tx.purchaseDate).toLocaleDateString()}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400">{tx.purchaseDateBS}</div>
+                                                </>
+                                            ) : (
+                                                <span className="text-slate-400">—</span>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap">
                                             {tx.travelDate ? (
@@ -785,6 +911,12 @@ export default function TransactionsTableClient({
                                                 <span className="text-slate-400">—</span>
                                             )}
                                         </td>
+                                        <td className="px-4 py-3 whitespace-nowrap">
+                                            <div className="text-slate-900 font-medium">
+                                                {new Date(tx.salesDate).toLocaleDateString()}
+                                            </div>
+                                            <div className="text-[10px] text-slate-400">{tx.salesDateBS}</div>
+                                        </td>
                                         <td className="px-4 py-3 min-w-[150px]">
                                             <div
                                                 className="text-slate-900 font-semibold truncate max-w-[180px]"
@@ -793,7 +925,12 @@ export default function TransactionsTableClient({
                                                 {formatPassengerNames(tx.passengerNames)}
                                             </div>
                                             <div className="flex flex-wrap gap-2 text-[9px] uppercase font-bold tracking-tighter">
-                                                {isPurchasePartyUnset(tx.purchasePartyName) && (
+                                                {ownSales && (
+                                                    <span className="px-1 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                                        Own
+                                                    </span>
+                                                )}
+                                                {supplierMissing && (
                                                     <span
                                                         className="px-1 rounded bg-orange-100 text-orange-800 border border-orange-200"
                                                         title={`Purchasing partner not set (${tx.purchasePartyName || "empty"})`}
@@ -827,28 +964,24 @@ export default function TransactionsTableClient({
                                                 >
                                                     {tx.paymentStatus}
                                                 </span>
-                                                <span
-                                                    className={`px-1 rounded ${
-                                                        tx.receivedStatus === "BANK"
-                                                            ? "bg-emerald-100 text-emerald-700"
-                                                            : tx.receivedStatus === "CASH"
-                                                              ? "bg-blue-100 text-blue-700"
-                                                              : tx.receivedStatus === "CHEQUE"
-                                                                ? "bg-violet-100 text-violet-700"
-                                                                : "bg-amber-100 text-amber-700"
-                                                    }`}
-                                                >
-                                                    {tx.receivedStatus}
-                                                </span>
+                                                {paymentMethodLabel && (
+                                                    <span
+                                                        className={`px-1 rounded ${
+                                                            paymentMethodLabel === "BANK"
+                                                                ? "bg-emerald-100 text-emerald-700"
+                                                                : paymentMethodLabel === "CASH"
+                                                                  ? "bg-blue-100 text-blue-700"
+                                                                  : paymentMethodLabel === "CHEQUE"
+                                                                    ? "bg-violet-100 text-violet-700"
+                                                                    : "bg-amber-100 text-amber-700"
+                                                        }`}
+                                                    >
+                                                        {paymentMethodLabel}
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-4 py-3 text-slate-600 truncate max-w-[120px]">{tx.partyName}</td>
-                                        <td className="px-4 py-3 text-brand-red font-mono text-xs font-bold whitespace-nowrap">
-                                            {tx.salesBillNo}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-500 font-mono text-xs truncate max-w-[120px]" title={tx.purchaseInvoiceNo}>
-                                            {tx.purchaseInvoiceNo || "—"}
-                                        </td>
                                         <td className="px-4 py-3 text-slate-500 font-medium">{tx.sector}</td>
                                         <td className="px-4 py-3 text-right text-slate-500 font-mono italic tabular-nums">
                                             {formatNumber(tx.purchaseAmount)}
@@ -931,7 +1064,7 @@ export default function TransactionsTableClient({
                         </tbody>
                         <tfoot className="bg-slate-50 font-bold divide-y divide-slate-200">
                             <tr className="text-slate-500 text-[10px]">
-                                <td colSpan={canEdit ? 8 : 7} className="px-4 py-4 text-right uppercase tracking-widest font-black">
+                                <td colSpan={canEdit ? 10 : 9} className="px-4 py-4 text-right uppercase tracking-widest font-black">
                                     Filtered View Total:
                                 </td>
                                 <td className="px-4 py-4 text-right font-mono italic tabular-nums">{formatNumber(pageTotals.purchase)}</td>
@@ -943,7 +1076,7 @@ export default function TransactionsTableClient({
                                 <td></td>
                             </tr>
                             <tr className="text-slate-900 bg-white">
-                                <td colSpan={canEdit ? 8 : 7} className="px-4 py-6 text-right uppercase tracking-[0.2em] font-black text-brand-red">
+                                <td colSpan={canEdit ? 10 : 9} className="px-4 py-6 text-right uppercase tracking-[0.2em] font-black text-brand-red">
                                     Grand Total (Registry):
                                 </td>
                                 <td className="px-4 py-6 text-right text-slate-500 font-mono tabular-nums">{formatNumber(globalTotals.purchase)}</td>

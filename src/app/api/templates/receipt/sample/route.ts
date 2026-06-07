@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
+import { Role } from "@prisma/client";
 import fs from "fs";
 import { resolveReceiptTemplatePath } from "@/lib/templates/paths";
+import { requireApiRole } from "@/lib/security/api-auth";
 
 export async function GET() {
+    const auth = await requireApiRole([Role.SUPERADMIN, Role.ADMIN]);
+    if (!auth.ok) return auth.response;
     try {
         const templatePath = resolveReceiptTemplatePath();
 

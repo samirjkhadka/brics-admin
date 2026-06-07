@@ -9,6 +9,7 @@ import { getPartyLedgerSummary } from "@/lib/ledger/party-ledger";
 import {
     ensureActiveFinancialYear,
     getActiveFinancialYear,
+    peekNextSalesBillNo,
 } from "@/lib/fiscal-year/service";
 import { getFiscalYearBounds } from "@/lib/fiscal-year/nepal-fy";
 import {
@@ -31,9 +32,7 @@ export async function getFiscalYearOverview() {
         data: {
             active,
             all,
-            nextBillPreview: active
-                ? previewBillFormat(active.billNoFormat, active.billPrefixYear, active.nextBillSeq)
-                : null,
+            nextBillPreview: active ? await peekNextSalesBillNo() : null,
         },
     };
 }

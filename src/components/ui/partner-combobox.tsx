@@ -10,10 +10,17 @@ export type PartnerOption = {
     bankName?: string | null;
 };
 
+export type PartnerComboboxExtraOption = {
+    id: string;
+    name: string;
+    groupLabel?: string;
+};
+
 type PartnerComboboxProps = {
     label: string;
     value: string;
     partners: PartnerOption[];
+    extraOptions?: PartnerComboboxExtraOption[];
     onChange: (name: string, partner?: PartnerOption) => void;
     required?: boolean;
 };
@@ -24,25 +31,31 @@ export default function PartnerCombobox({
     label,
     value,
     partners,
+    extraOptions = [],
     onChange,
     required,
 }: PartnerComboboxProps) {
     const matched = partners.find((p) => p.name === value);
+    const matchedExtra = extraOptions.find((o) => o.name === value);
     const [mode, setMode] = useState<"partner" | "custom">(
-        value && !matched ? "custom" : "partner"
+        value && !matched && !matchedExtra ? "custom" : "partner"
     );
-    const [selectedId, setSelectedId] = useState(matched?.id || "");
+    const [selectedId, setSelectedId] = useState(matched?.id || matchedExtra?.id || "");
 
     useEffect(() => {
         const m = partners.find((p) => p.name === value);
+        const extra = extraOptions.find((o) => o.name === value);
         if (m) {
             setMode("partner");
             setSelectedId(m.id);
+        } else if (extra) {
+            setMode("partner");
+            setSelectedId(extra.id);
         } else if (value) {
             setMode("custom");
             setSelectedId(CUSTOM_VALUE);
         }
-    }, [value, partners]);
+    }, [value, partners, extraOptions]);
 
     const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const id = e.target.value;
@@ -53,7 +66,12 @@ export default function PartnerCombobox({
         } else {
             setMode("partner");
             const partner = partners.find((p) => p.id === id);
-            if (partner) onChange(partner.name, partner);
+            if (partner) {
+                onChange(partner.name, partner);
+                return;
+            }
+            const extra = extraOptions.find((o) => o.id === id);
+            if (extra) onChange(extra.name);
         }
     };
 
@@ -77,6 +95,15 @@ export default function PartnerCombobox({
                         {p.name}
                     </option>
                 ))}
+                {extraOptions.length > 0 && (
+                    <optgroup label="Passengers">
+                        {extraOptions.map((o) => (
+                            <option key={o.id} value={o.id}>
+                                {o.name}
+                            </option>
+                        ))}
+                    </optgroup>
+                )}
                 <option value={CUSTOM_VALUE}>Custom name...</option>
             </select>
             {mode === "custom" && (

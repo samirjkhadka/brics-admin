@@ -2,14 +2,17 @@ import db from "@/lib/db";
 import { DollarSign, FileCheck, TrendingUp, Plane } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
-import { startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
 import { formatNPR } from "@/lib/utils/format-currency";
 import { formatPassengerNames } from "@/lib/utils/parse-passengers";
 import { getFiscalYearMonthlyTrends } from "@/lib/dashboard/trends";
 import { getActiveFinancialYear } from "@/lib/fiscal-year/service";
 import MonthlyTrendsChart from "@/components/dashboard/monthly-trends-chart";
+import RouteAnalyticsCharts from "@/components/dashboard/route-analytics-charts";
 import StatCard from "@/components/dashboard/stat-card";
 import FiscalYearStatCard from "@/components/dashboard/fiscal-year-stat-card";
+import { getRouteAnalytics } from "@/lib/dashboard/route-analytics";
+import { displayPaymentMethod } from "@/lib/utils/payment-status";
 
 export default async function DashboardPage({
     searchParams,
@@ -67,6 +70,13 @@ export default async function DashboardPage({
     const salesTrend = lastSales === 0 ? 100 : ((currentSales - lastSales) / lastSales) * 100;
     const profitTrend = lastProfit === 0 ? 100 : ((currentProfit - lastProfit) / lastProfit) * 100;
 
+    const currentMonthLabel = format(now, "MMMM yyyy");
+    const lastMonthLabel = format(subMonths(now, 1), "MMMM yyyy");
+    const monthlyTrendContext = {
+        periodLabel: currentMonthLabel,
+        compareMonthLabel: lastMonthLabel,
+    };
+
     const fyStatsPromise = activeFy
         ? db.transaction.aggregate({
               where: {
@@ -77,10 +87,11 @@ export default async function DashboardPage({
           })
         : Promise.resolve({ _sum: { salesAmount: null, purchaseAmount: null, vatAmount: null } });
 
-    const [transactions, upcomingFlights, chartData, outstanding, fyStats] = await Promise.all([
+    const [transactions, upcomingFlights, chartData, outstanding, fyStats, routeAnalytics] =
+        await Promise.all([
         db.transaction.findMany({
             where: { isVoided: false },
-            orderBy: { createdAt: "desc" },
+            orderBy: [{ billSequence: "desc" }, { salesBillNo: "desc" }],
             take: 10,
         }),
         db.transaction.findMany({
@@ -102,6 +113,7 @@ export default async function DashboardPage({
             select: { salesAmount: true, amountReceived: true },
         }),
         fyStatsPromise,
+        getRouteAnalytics(),
     ]);
 
     const outstandingTotal = outstanding.reduce(
@@ -118,6 +130,8 @@ export default async function DashboardPage({
             name: "Total Sales (Monthly)",
             value: formatNPR(currentSales),
             trend: salesTrend,
+            compareValue: formatNPR(lastSales),
+            ...monthlyTrendContext,
             icon: DollarSign,
             color: "text-blue-500",
             bg: "bg-blue-500/10",
@@ -133,6 +147,8 @@ export default async function DashboardPage({
             name: "Net Profit (Monthly)",
             value: formatNPR(currentProfit),
             trend: profitTrend,
+            compareValue: formatNPR(lastProfit),
+            ...monthlyTrendContext,
             icon: TrendingUp,
             color: "text-purple-500",
             bg: "bg-purple-500/10",
@@ -207,6 +223,8 @@ export default async function DashboardPage({
                 </Suspense>
             )}
 
+            <RouteAnalyticsCharts data={routeAnalytics} />
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -220,6 +238,7 @@ export default async function DashboardPage({
                             <thead>
                                 <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-wider border-b border-slate-100">
                                     <th className="px-6 py-4">Passengers</th>
+                                    <th className="px-6 py-4 text-center">S.N.</th>
                                     <th className="px-6 py-4">Bill No</th>
                                     <th className="px-6 py-4">Sales Date (BS)</th>
                                     <th className="px-6 py-4">Amount</th>
@@ -239,6 +258,9 @@ export default async function DashboardPage({
                                             </div>
                                             <div className="text-xs text-slate-400">{tx.sector}</div>
                                         </td>
+                                        <td className="px-6 py-4 text-sm font-mono text-slate-500 text-center">
+                                            {tx.billSequence ?? "—"}
+                                        </td>
                                         <td className="px-6 py-4 text-sm font-mono text-slate-500">{tx.salesBillNo}</td>
                                         <td className="px-6 py-4 text-sm text-slate-500">{tx.salesDateBS}</td>
                                         <td className="px-6 py-4">
@@ -246,17 +268,24 @@ export default async function DashboardPage({
                                             <div className="text-xs text-emerald-600 font-medium">VAT: {formatNPR(tx.vatAmount)}</div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span
-                                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase ${
-                                                    tx.receivedStatus === "BANK"
-                                                        ? "bg-emerald-100 text-emerald-700"
-                                                        : tx.receivedStatus === "CASH"
-                                                          ? "bg-blue-100 text-blue-700"
-                                                          : "bg-amber-100 text-amber-700"
-                                                }`}
-                                            >
-                                                {tx.receivedStatus}
-                                            </span>
+                                            {displayPaymentMethod(tx.receivedStatus, tx.paymentStatus) ? (
+                                                <span
+                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase ${
+                                                        tx.receivedStatus === "BANK"
+                                                            ? "bg-emerald-100 text-emerald-700"
+                                                            : tx.receivedStatus === "CASH"
+                                                              ? "bg-blue-100 text-blue-700"
+                                                              : "bg-amber-100 text-amber-700"
+                                                    }`}
+                                                >
+                                                    {displayPaymentMethod(
+                                                        tx.receivedStatus,
+                                                        tx.paymentStatus
+                                                    )}
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">—</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <Link

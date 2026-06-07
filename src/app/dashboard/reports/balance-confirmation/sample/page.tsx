@@ -29,7 +29,7 @@ export default function BalanceConfirmationSamplePage() {
     return (
         <RoleGate allowed={[Role.SUPERADMIN, Role.ADMIN, Role.VIEWER]}>
             <SamplePageShell title="Balance Confirmation" backHref="/dashboard/reports/balance-confirmation">
-                <div className="max-w-5xl mx-auto bg-white border border-slate-200 p-10 shadow-lg print:shadow-none font-serif">
+                <div className="max-w-[210mm] mx-auto bg-white border border-slate-200 p-10 shadow-lg print:shadow-none print:border-0 print:p-4 font-serif">
                     <div className="text-center mb-8">
                         <h1 className="text-lg font-bold">BRICS WORLD TRAVEL AND TOURS Pvt. Ltd.</h1>
                         <p className="text-sm">Kirtipur, Kathmandu, Nepal</p>

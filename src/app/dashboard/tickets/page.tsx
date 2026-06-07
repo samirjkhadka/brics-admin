@@ -16,7 +16,7 @@ export default async function TransactionsListPage({
     const canEdit = session?.user?.role === Role.SUPERADMIN || session?.user?.role === Role.ADMIN;
 
     const transactions = await db.transaction.findMany({
-        orderBy: { salesDate: "desc" },
+        orderBy: [{ billSequence: "desc" }, { salesBillNo: "desc" }],
         include: { refunds: true },
     });
 

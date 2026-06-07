@@ -4,29 +4,42 @@ import * as XLSX from "xlsx";
 import { formatPassengerNames } from "@/lib/utils/parse-passengers";
 import fs from "fs";
 import path from "path";
+import {
+    assertCronConfigured,
+    cronMisconfiguredResponse,
+    cronUnauthorizedResponse,
+    verifyCronBearer,
+} from "@/lib/security/cron-auth";
+import { sanitizeSpreadsheetRow } from "@/lib/security/sanitize-export-cell";
+import { publicErrorMessage } from "@/lib/security/sanitize-error";
 
 export async function GET(req: NextRequest) {
-    const authHeader = req.headers.get("authorization");
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!assertCronConfigured()) {
+        return cronMisconfiguredResponse();
+    }
+    if (!verifyCronBearer(req.headers.get("authorization"))) {
+        return cronUnauthorizedResponse();
     }
 
     try {
         const transactions = await db.transaction.findMany({
             where: { isVoided: false },
-            orderBy: { createdAt: "desc" },
+            orderBy: [{ billSequence: "desc" }, { salesBillNo: "desc" }],
         });
 
-        const data = transactions.map((tx) => ({
-            "Sales Bill No": tx.salesBillNo,
-            "Sales Date": tx.salesDate.toISOString().split("T")[0],
-            PARTY: tx.partyName,
-            "Client Name": formatPassengerNames(tx.passengerNames),
-            "Sale Amount": Number(tx.salesAmount),
-            "Purchase Amount": Number(tx.purchaseAmount),
-            "Output VAT": Number(tx.vatAmount),
-            Sector: tx.sector,
-        }));
+        const data = transactions.map((tx) =>
+            sanitizeSpreadsheetRow({
+                "S.N.": tx.billSequence ?? "",
+                "Sales Bill No": tx.salesBillNo,
+                "Sales Date": tx.salesDate.toISOString().split("T")[0],
+                PARTY: tx.partyName,
+                "Client Name": formatPassengerNames(tx.passengerNames),
+                "Sale Amount": Number(tx.salesAmount),
+                "Purchase Amount": Number(tx.purchaseAmount),
+                "Output VAT": Number(tx.vatAmount),
+                Sector: tx.sector,
+            })
+        );
 
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
@@ -44,12 +57,12 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            path: filePath,
             rows: transactions.length,
         });
     } catch (error: unknown) {
-        console.error("Backup Error:", error);
-        const message = error instanceof Error ? error.message : "Unknown error";
-        return NextResponse.json({ error: message }, { status: 500 });
+        return NextResponse.json(
+            { error: publicErrorMessage(error, "Backup failed") },
+            { status: 500 }
+        );
     }
 }

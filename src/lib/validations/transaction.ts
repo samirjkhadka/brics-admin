@@ -16,7 +16,7 @@ export const transactionSchema = z
         purchaseAmount: z.coerce.number().min(0, "Purchase amount cannot be negative"),
         salesAmount: z.coerce.number().min(0, "Sales amount cannot be negative"),
         exemptAmount: z.coerce.number().default(0),
-        receivedStatus: z.nativeEnum(PaymentMethod),
+        receivedStatus: z.nativeEnum(PaymentMethod).optional(),
         receivedDate: z.string().optional().nullable(),
         receiptNo: z.string().optional().nullable(),
         chequeNo: z.string().optional().nullable(),
@@ -31,15 +31,30 @@ export const transactionSchema = z
         message: "Exempt amount cannot be greater than sales amount",
         path: ["exemptAmount"],
     })
-    .refine(
-        (data) =>
-            data.receivedStatus !== PaymentMethod.CHEQUE ||
-            (data.chequeNo?.trim().length ?? 0) > 0,
-        {
-            message: "Cheque number is required when payment is Cheque",
-            path: ["chequeNo"],
+    .superRefine((data, ctx) => {
+        const hasPayment =
+            (data.amountReceived ?? 0) > 0 || !!(data.receivedDate && data.receivedDate.trim());
+
+        if (hasPayment && !data.receivedStatus) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Payment method is required when recording payment",
+                path: ["receivedStatus"],
+            });
         }
-    )
+
+        if (
+            hasPayment &&
+            data.receivedStatus === PaymentMethod.CHEQUE &&
+            !(data.chequeNo?.trim())
+        ) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Cheque number is required when payment is Cheque",
+                path: ["chequeNo"],
+            });
+        }
+    })
     .refine(
         (data) => {
             if (!data.purchaseDate || !data.salesDate) return true;
@@ -57,6 +72,17 @@ export const transactionSchema = z
 
 export const voidTransactionSchema = z.object({
     reason: z.string().min(1, "Void reason is required"),
+});
+
+export const bulkVoidTransactionsSchema = z.object({
+    transactionIds: z.array(z.string().min(1)).min(1, "Select at least one transaction"),
+    reason: z.string().min(1, "Void reason is required"),
+    expandBookingGroups: z.boolean().optional().default(false),
+});
+
+export const bulkDeleteTransactionsSchema = z.object({
+    transactionIds: z.array(z.string().min(1)).min(1, "Select at least one transaction"),
+    expandBookingGroups: z.boolean().optional().default(false),
 });
 
 export type TransactionInput = z.infer<typeof transactionSchema>;

@@ -4,6 +4,7 @@ import db from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { Role } from "@prisma/client";
 import { requireRole } from "@/lib/auth/session";
+import { publicErrorMessage } from "@/lib/security/sanitize-error";
 import { writeAuditLog } from "@/lib/audit/log";
 import { adStringToBs } from "@/lib/utils/nepali-calendar";
 import { toDecimal } from "@/lib/utils/decimal";
@@ -130,7 +131,7 @@ export async function createRefund(transactionId: string, formData: unknown) {
 
         return { success: true, data: refund };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to create refund";
+        const message = publicErrorMessage(error, "Failed to create refund");
         return { success: false, error: message };
     }
 }

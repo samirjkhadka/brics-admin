@@ -12,6 +12,7 @@ export default function BulkUploadForm() {
     const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
     const [preview, setPreview] = useState<{
         validRows: Record<string, unknown>[];
+        validRowNumbers: number[];
         errors: { row: number; message: string }[];
         fileName: string;
     } | null>(null);
@@ -34,10 +35,11 @@ export default function BulkUploadForm() {
             const workbook = XLSX.read(buffer, { type: "array" });
             const sheet = workbook.Sheets[workbook.SheetNames[0]];
             const rawRows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
-            const { validRows, errors: parseErrors } = parseAndValidateRows(rawRows);
+            const { validRows, validRowNumbers, errors: parseErrors } = parseAndValidateRows(rawRows);
 
             setPreview({
                 validRows,
+                validRowNumbers,
                 errors: parseErrors,
                 fileName: file.name,
             });
@@ -68,7 +70,7 @@ export default function BulkUploadForm() {
         for (let i = 0; i < total; i++) {
             const res = await bulkCreateTransactions([preview.validRows[i]], {
                 revalidate: i === total - 1,
-                startRowIndex: i,
+                spreadsheetRow: preview.validRowNumbers[i],
             });
 
             if (!res.success) {

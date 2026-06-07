@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { RoleGate } from "@/components/auth/role-gate";
+import { enforcePageRole, RoleGate } from "@/components/auth/role-gate";
 import { Role, FiscalYearStatus } from "@prisma/client";
 import db from "@/lib/db";
 import PartnerLedgerForm from "@/components/partners/partner-ledger-form";
@@ -9,6 +9,8 @@ export default async function PartnerLedgerPage({
 }: {
     params: Promise<{ id: string }>;
 }) {
+    await enforcePageRole([Role.SUPERADMIN]);
+
     const { id } = await params;
     const partner = await db.partner.findUnique({ where: { id } });
     if (!partner) notFound();

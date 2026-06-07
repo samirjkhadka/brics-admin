@@ -1,6 +1,15 @@
 import { Role } from "@prisma/client";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth/session";
+import { requireRole } from "@/lib/auth/session";
+
+/** Call at the top of a page before loading restricted data (uses DB role, not stale JWT). */
+export async function enforcePageRole(allowed: Role[]) {
+    const result = await requireRole(allowed);
+    if (!result.ok) {
+        redirect("/dashboard?error=forbidden");
+    }
+    return result.session;
+}
 
 export async function RoleGate({
     allowed,
@@ -9,11 +18,6 @@ export async function RoleGate({
     allowed: Role[];
     children: React.ReactNode;
 }) {
-    const session = await getSession();
-
-    if (!session?.user?.role || !allowed.includes(session.user.role)) {
-        redirect("/dashboard?error=forbidden");
-    }
-
+    await enforcePageRole(allowed);
     return <>{children}</>;
 }

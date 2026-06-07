@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { RoleGate } from "@/components/auth/role-gate";
+import { enforcePageRole, RoleGate } from "@/components/auth/role-gate";
 import { Role } from "@prisma/client";
 import db from "@/lib/db";
 import UsersTable from "@/components/users/users-table";
 
 export default async function UsersPage() {
+    await enforcePageRole([Role.SUPERADMIN]);
+
     const users = await db.user.findMany({
         orderBy: { createdAt: "desc" },
         select: {

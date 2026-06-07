@@ -26,11 +26,13 @@ export default function MonthlyTrendsChart({
     fiscalYears,
     selectedFyId,
     selectedMonthIndices,
+    basePath = "/dashboard",
 }: {
     chartData: MonthlyTrendPoint[];
     fiscalYears: FiscalYearOption[];
     selectedFyId: string;
     selectedMonthIndices: number[];
+    basePath?: string;
 }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -47,7 +49,7 @@ export default function MonthlyTrendsChart({
             if (value === null) params.delete(key);
             else params.set(key, value);
         }
-        router.push(`/dashboard?${params.toString()}`);
+        router.push(`${basePath}?${params.toString()}`);
     };
 
     const handleFyChange = (fyId: string) => {

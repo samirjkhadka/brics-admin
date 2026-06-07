@@ -1,10 +1,12 @@
-import { RoleGate } from "@/components/auth/role-gate";
+import { enforcePageRole, RoleGate } from "@/components/auth/role-gate";
 import { Role } from "@prisma/client";
 import db from "@/lib/db";
 import { FiscalYearStatus } from "@prisma/client";
 import FiscalYearClient from "@/components/settings/fiscal-year-client";
 
 export default async function FiscalYearSettingsPage() {
+    await enforcePageRole([Role.SUPERADMIN]);
+
     const [active, all] = await Promise.all([
         db.financialYear.findFirst({
             where: { status: FiscalYearStatus.OPEN },

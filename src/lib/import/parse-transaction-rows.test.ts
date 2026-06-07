@@ -128,8 +128,12 @@ describe("parse-transaction-rows", () => {
     });
 
     it("validates legacy rows from a batch", () => {
-        const { validRows, errors } = parseAndValidateRows([LEGACY_ROW, LEGACY_ROW]);
+        const { validRows, validRowNumbers, errors } = parseAndValidateRows([
+            LEGACY_ROW,
+            { ...LEGACY_ROW, "Sales Bill No": "383" },
+        ]);
         expect(validRows.length).toBe(2);
+        expect(validRowNumbers).toEqual([2, 3]);
         expect(errors).toHaveLength(0);
     });
 });

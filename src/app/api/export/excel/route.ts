@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import * as XLSX from "xlsx";
+import { Role } from "@prisma/client";
 import { formatPassengerNames } from "@/lib/utils/parse-passengers";
 import { Prisma } from "@prisma/client";
 import { sumRefundTotals } from "@/lib/refunds/helpers";
+import { requireApiRole } from "@/lib/security/api-auth";
+import { sanitizeSpreadsheetRow } from "@/lib/security/sanitize-export-cell";
+import { displayPaymentMethod } from "@/lib/utils/payment-status";
+import { formatPurchasedFromLabel } from "@/lib/utils/purchase-party";
 
 function parseDateParam(value: string | null): Date | undefined {
     if (!value) return undefined;
@@ -12,6 +17,9 @@ function parseDateParam(value: string | null): Date | undefined {
 }
 
 export async function GET(req: NextRequest) {
+    const auth = await requireApiRole([Role.SUPERADMIN, Role.ADMIN]);
+    if (!auth.ok) return auth.response;
+
     try {
         const params = req.nextUrl.searchParams;
         const excludeVoided = params.get("excludeVoided") !== "false";
@@ -38,7 +46,7 @@ export async function GET(req: NextRequest) {
 
         const transactions = await db.transaction.findMany({
             where,
-            orderBy: { createdAt: "desc" },
+            orderBy: [{ billSequence: "desc" }, { salesBillNo: "desc" }],
             include: { refunds: true },
         });
 
@@ -103,34 +111,48 @@ export async function GET(req: NextRequest) {
             return true;
         });
 
-        const data = filtered.map((tx) => {
+        const sorted = [...filtered].sort((a, b) => {
+            const seqA = a.billSequence ?? -1;
+            const seqB = b.billSequence ?? -1;
+            if (seqB !== seqA) return seqB - seqA;
+            return b.salesBillNo.localeCompare(a.salesBillNo);
+        });
+
+        const data = sorted.map((tx) => {
             const refundTotals = sumRefundTotals(tx.refunds);
-            return {
-            "Bill Date (BS)": tx.purchaseDateBS || tx.salesDateBS,
-            "Bill Date (AD)": tx.purchaseDate
-                ? tx.purchaseDate.toISOString().split("T")[0]
-                : tx.salesDate.toISOString().split("T")[0],
-            "Travel Date": tx.travelDate?.toISOString().split("T")[0] || "",
-            "Purchase Invoice No": tx.purchaseInvoiceNo,
-            "Purchase Amount": Number(tx.purchaseAmount),
-            "Sales Date": tx.salesDate.toISOString().split("T")[0],
+            const netProfit = Number(tx.salesAmount) - Number(tx.purchaseAmount);
+            return sanitizeSpreadsheetRow({
+            "S.N.": tx.billSequence ?? "",
             "Sales Bill No": tx.salesBillNo,
+            "Purchase Invoice No": tx.purchaseInvoiceNo,
+            "Purchase Bill Date (AD)": tx.purchaseDate?.toISOString().split("T")[0] || "",
+            "Purchase Bill Date (BS)": tx.purchaseDateBS || "",
+            "Travel Date": tx.travelDate?.toISOString().split("T")[0] || "",
+            "Sales Date": tx.salesDate.toISOString().split("T")[0],
+            "Sales Date (BS)": tx.salesDateBS,
             "Client Name": formatPassengerNames(tx.passengerNames),
             PARTY: tx.partyName,
             Sector: tx.sector,
+            "Purchase Amount": Number(tx.purchaseAmount),
             "Sale Amount": Number(tx.salesAmount),
-            "Segregate of Sales Amount as per Bill": Number(tx.salesAmount),
             Exempt: Number(tx.exemptAmount),
             Taxable: Number(tx.taxableAmount),
             "Output VAT": Number(tx.vatAmount),
+            "Net Profit": netProfit,
+            "Segregate of Sales Amount as per Bill": Number(tx.salesAmount),
             "Payment Status": tx.paymentStatus,
             "Amount Received": Number(tx.amountReceived),
-            "Recieved On": tx.receivedStatus,
+            "Recieved On":
+                displayPaymentMethod(tx.receivedStatus, tx.paymentStatus) || "",
             "Received Date": tx.receivedDate?.toISOString().split("T")[0] || "",
             "Receipt No": tx.receiptNo || "",
             Remarks: tx.remarks || "",
             "Other Remarks": "",
-            "Purchased From": tx.purchasePartyName,
+            "Purchased From": formatPurchasedFromLabel({
+                purchasePartyName: tx.purchasePartyName,
+                purchaseInvoiceNo: tx.purchaseInvoiceNo,
+                purchaseAmount: Number(tx.purchaseAmount),
+            }),
             "Cheque No": tx.chequeNo || "",
             "Party VAT No": tx.partyVatNo || "",
             "Contact No": tx.contactNo || "",
@@ -141,7 +163,7 @@ export async function GET(req: NextRequest) {
             "Customer Refunded": refundTotals.customerRefund,
             "Cash Refunded": refundTotals.customerCash,
             "Supplier Credit": refundTotals.supplierCredit,
-        };
+        });
         });
 
         const worksheet = XLSX.utils.json_to_sheet(data);

@@ -4,9 +4,11 @@ import TicketEntryForm from "@/components/tickets/ticket-form";
 import BulkUploadForm from "@/components/tickets/bulk-upload-form";
 import { getNextSalesBillNo } from "@/lib/utils/sales-bill-no";
 import { adStringToBs } from "@/lib/utils/nepali-calendar";
-import { RoleGate } from "@/components/auth/role-gate";
+import { enforcePageRole, RoleGate } from "@/components/auth/role-gate";
 
 export default async function NewTicketPage() {
+    await enforcePageRole([Role.SUPERADMIN, Role.ADMIN]);
+
     const today = new Date().toISOString().split("T")[0];
     const defaultInitialData = {
         salesDate: today,

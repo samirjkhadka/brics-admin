@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 import { Download, ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
 import { formatNPR } from "@/lib/utils/format-currency";
-import { isPurchasePartyUnset } from "@/lib/utils/purchase-party";
+import {
+    formatPurchasedFromLabel,
+    isOwnSalesBill,
+    isPurchasePartyUnset,
+} from "@/lib/utils/purchase-party";
+import { displayPaymentMethod } from "@/lib/utils/payment-status";
 import { parsePassengers } from "@/lib/utils/parse-passengers";
 import { TransactionActions } from "@/components/tickets/transaction-actions";
 import { IssueReceiptButton } from "@/components/tickets/issue-receipt-button";
@@ -11,6 +16,8 @@ import { RefundTransactionButton } from "@/components/tickets/refund-transaction
 import { getSession } from "@/lib/auth/session";
 import { Role } from "@prisma/client";
 import { sumRefundTotals } from "@/lib/refunds/helpers";
+import { getLinkedTransactions } from "@/lib/booking/group";
+import LinkedBookingsCard from "@/components/tickets/linked-bookings-card";
 
 export default async function TransactionDetailPage({
     params,
@@ -18,13 +25,17 @@ export default async function TransactionDetailPage({
     params: Promise<{ id: string }>;
 }) {
     const { id } = await params;
-    const [tx, receipt, session] = await Promise.all([
+    const [tx, receipt, session, linkedBookings] = await Promise.all([
         db.transaction.findUnique({
             where: { id },
-            include: { refunds: { orderBy: { refundDateAD: "desc" } } },
+            include: {
+                refunds: { orderBy: { refundDateAD: "desc" } },
+                purchaseLegs: { orderBy: { legIndex: "asc" } },
+            },
         }),
         db.paymentReceipt.findFirst({ where: { transactionId: id } }),
         getSession(),
+        getLinkedTransactions(id),
     ]);
 
     if (!tx) notFound();
@@ -37,7 +48,14 @@ export default async function TransactionDetailPage({
 
     const passengers = parsePassengers(tx.passengerNames);
 
-    const supplierMissing = isPurchasePartyUnset(tx.purchasePartyName);
+    const purchaseSource = {
+        purchasePartyName: tx.purchasePartyName,
+        purchaseInvoiceNo: tx.purchaseInvoiceNo,
+        purchaseAmount: Number(tx.purchaseAmount),
+    };
+    const ownSales = isOwnSalesBill(purchaseSource);
+    const supplierMissing = !ownSales && isPurchasePartyUnset(tx.purchasePartyName);
+    const purchasedFromLabel = formatPurchasedFromLabel(purchaseSource);
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 pb-20">
@@ -57,6 +75,45 @@ export default async function TransactionDetailPage({
                     )}
                 </div>
             )}
+            <LinkedBookingsCard currentId={tx.id} transactions={linkedBookings} />
+
+            {tx.purchaseLegs.length > 1 && (
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                        <p className="text-sm font-black text-slate-900">Purchase legs</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Supplier invoices linked to this customer bill
+                        </p>
+                    </div>
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-100">
+                                <th className="px-6 py-3">#</th>
+                                <th className="px-6 py-3">Purchase Invoice</th>
+                                <th className="px-6 py-3">Supplier</th>
+                                <th className="px-6 py-3">Sector</th>
+                                <th className="px-6 py-3 text-right">Purchase</th>
+                                <th className="px-6 py-3 text-right">Line Sales</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {tx.purchaseLegs.map((leg) => (
+                                <tr key={leg.id}>
+                                    <td className="px-6 py-3 font-mono text-slate-500">{leg.legIndex}</td>
+                                    <td className="px-6 py-3 font-mono">{leg.purchaseInvoiceNo}</td>
+                                    <td className="px-6 py-3">{leg.purchasePartyName}</td>
+                                    <td className="px-6 py-3 font-medium">{leg.sector}</td>
+                                    <td className="px-6 py-3 text-right">{formatNPR(leg.purchaseAmount)}</td>
+                                    <td className="px-6 py-3 text-right font-semibold">
+                                        {formatNPR(leg.lineSalesAmount)}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
             <div className="flex justify-between items-center">
                 <Link
                     href="/dashboard/tickets"
@@ -142,7 +199,7 @@ export default async function TransactionDetailPage({
                             <p className="text-lg font-black text-slate-900">{tx.partyName}</p>
                             <p className="text-sm text-slate-600 font-medium mt-1">VAT No: <span className="text-slate-900">{tx.partyVatNo || "N/A"}</span></p>
                             <p className="text-sm text-slate-600 font-medium">Contact: <span className="text-slate-900">{tx.contactNo || "N/A"}</span></p>
-                            <p className="text-sm text-slate-600 font-medium">Purchased From: <span className="text-slate-900">{tx.purchasePartyName}</span></p>
+                            <p className="text-sm text-slate-600 font-medium">Purchased From: <span className="text-slate-900">{purchasedFromLabel}</span></p>
                         </div>
                     </div>
                     <div className="text-right space-y-4">
@@ -165,26 +222,55 @@ export default async function TransactionDetailPage({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            <tr>
-                                <td className="px-6 py-8">
-                                    <div className="space-y-4">
-                                        <div>
-                                            <p className="font-black text-slate-900 uppercase">Air Ticket</p>
-                                            <p className="text-xs text-slate-400 font-medium mt-1 italic">Travel Date: {tx.travelDate?.toLocaleDateString() || "N/A"}</p>
-                                        </div>
-                                        <div className="space-y-2">
-                                            {passengers.map((p, idx) => (
-                                                <div key={idx} className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
-                                                    <p className="font-black text-slate-800 text-sm">{p.name}</p>
-                                                    <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Ticket: {p.ticketNo || "N/A"}</p>
+                            {(tx.purchaseLegs.length > 0
+                                ? tx.purchaseLegs
+                                : [
+                                      {
+                                          id: "fallback",
+                                          sector: tx.sector,
+                                          lineSalesAmount: tx.salesAmount,
+                                      },
+                                  ]
+                            ).map((leg, index) => (
+                                <tr key={leg.id}>
+                                    <td className="px-6 py-8">
+                                        {index === 0 ? (
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <p className="font-black text-slate-900 uppercase">Air Ticket</p>
+                                                    <p className="text-xs text-slate-400 font-medium mt-1 italic">
+                                                        Travel Date:{" "}
+                                                        {tx.travelDate?.toLocaleDateString() || "N/A"}
+                                                    </p>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-8 text-center font-bold text-slate-700">{tx.sector}</td>
-                                <td className="px-6 py-8 text-right font-black text-slate-900">{formatNPR(tx.salesAmount)}</td>
-                            </tr>
+                                                <div className="space-y-2">
+                                                    {passengers.map((p, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className="bg-slate-50/50 p-3 rounded-xl border border-slate-100"
+                                                        >
+                                                            <p className="font-black text-slate-800 text-sm">
+                                                                {p.name}
+                                                            </p>
+                                                            <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">
+                                                                Ticket: {p.ticketNo || "N/A"}
+                                                            </p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span className="text-slate-400 text-xs">Additional sector</span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-8 text-center font-bold text-slate-700">
+                                        {leg.sector}
+                                    </td>
+                                    <td className="px-6 py-8 text-right font-black text-slate-900">
+                                        {formatNPR(leg.lineSalesAmount)}
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
@@ -239,7 +325,9 @@ export default async function TransactionDetailPage({
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div>
                             <span className="text-slate-500 font-bold text-[10px] uppercase">Payment Via</span>
-                            <p className="text-slate-900 font-semibold">{tx.receivedStatus}</p>
+                            <p className="text-slate-900 font-semibold">
+                                {displayPaymentMethod(tx.receivedStatus, tx.paymentStatus) || "—"}
+                            </p>
                         </div>
                         {tx.chequeNo && (
                             <div>

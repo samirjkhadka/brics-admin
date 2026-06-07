@@ -3,6 +3,13 @@ import db from "@/lib/db";
 import { sendFlightAlert } from "@/lib/notifications/email";
 import { sendSmsAlert } from "@/lib/notifications/sms";
 import { differenceInHours } from "date-fns";
+import {
+    assertCronConfigured,
+    cronMisconfiguredResponse,
+    cronUnauthorizedResponse,
+    verifyCronBearer,
+} from "@/lib/security/cron-auth";
+import { publicErrorMessage } from "@/lib/security/sanitize-error";
 
 const ALERT_WINDOWS: { type: string; minHours: number; maxHours: number }[] = [
     { type: "3 days", minHours: 60, maxHours: 84 },
@@ -13,9 +20,11 @@ const ALERT_WINDOWS: { type: string; minHours: number; maxHours: number }[] = [
 ];
 
 export async function GET(req: NextRequest) {
-    const authHeader = req.headers.get("authorization");
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!assertCronConfigured()) {
+        return cronMisconfiguredResponse();
+    }
+    if (!verifyCronBearer(req.headers.get("authorization"))) {
+        return cronUnauthorizedResponse();
     }
 
     try {
@@ -72,8 +81,9 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ success: true, sent: sentAlerts });
     } catch (error: unknown) {
-        console.error("Cron Error:", error);
-        const message = error instanceof Error ? error.message : "Unknown error";
-        return NextResponse.json({ error: message }, { status: 500 });
+        return NextResponse.json(
+            { error: publicErrorMessage(error, "Notification job failed") },
+            { status: 500 }
+        );
     }
 }

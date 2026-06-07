@@ -52,6 +52,11 @@ enum RefundStatus {
   FULL
 }
 
+enum BillingMode {
+  SINGLE
+  SPLIT
+}
+
 model User {
   id        String   @id @default(cuid())
   name      String?
@@ -157,12 +162,39 @@ model Transaction {
   voidReason        String?
   voidedAt          DateTime?
   refundStatus      RefundStatus  @default(NONE)
+  billingMode       BillingMode   @default(SINGLE)
+  bookingGroupId    String?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   notificationLogs  NotificationLog[]
   receipts          PaymentReceipt[]
   receiptAllocations PaymentReceiptAllocation[]
   refunds           Refund[]
+  purchaseLegs      PurchaseLeg[]
+
+  @@index([bookingGroupId])
+}
+
+model PurchaseLeg {
+  id                String      @id @default(cuid())
+  transactionId     String
+  transaction       Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  legIndex          Int
+  purchaseInvoiceNo String
+  purchasePartyName String
+  sector            String
+  purchaseDate      DateTime?
+  purchaseDateBS    String?
+  travelDate        DateTime?
+  travelDateBS      String?
+  purchaseAmount    Decimal     @db.Decimal(12, 2)
+  lineSalesAmount   Decimal     @db.Decimal(12, 2)
+  exemptAmount      Decimal     @default(0) @db.Decimal(12, 2)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([transactionId])
+  @@index([purchaseInvoiceNo])
 }
 
 model Refund {

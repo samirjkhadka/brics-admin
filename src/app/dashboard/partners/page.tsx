@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { RoleGate } from "@/components/auth/role-gate";
+import { enforcePageRole, RoleGate } from "@/components/auth/role-gate";
 import { PartnerType, Role } from "@prisma/client";
 import db from "@/lib/db";
 import PartnersTable from "@/components/partners/partners-table";
@@ -12,6 +12,8 @@ export default async function PartnersPage({
 }: {
     searchParams: Promise<{ type?: string }>;
 }) {
+    await enforcePageRole([Role.SUPERADMIN]);
+
     const { type } = await searchParams;
 
     const where =

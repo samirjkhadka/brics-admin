@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Role } from "@prisma/client";
 import db from "@/lib/db";
+import { requireApiRole } from "@/lib/security/api-auth";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import fs from "fs";
@@ -17,6 +19,9 @@ export async function GET(
     _req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const auth = await requireApiRole([Role.SUPERADMIN, Role.ADMIN, Role.VIEWER]);
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
     try {
         const receipt =

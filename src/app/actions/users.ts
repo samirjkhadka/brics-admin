@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { requireRole } from "@/lib/auth/session";
+import { publicErrorMessage } from "@/lib/security/sanitize-error";
 import {
     createUserSchema,
     updateUserSchema,
@@ -38,7 +39,7 @@ export async function listUsers() {
         });
         return { success: true, data: users };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to list users";
+        const message = publicErrorMessage(error, "Failed to list users");
         return { success: false, error: message };
     }
 }
@@ -75,7 +76,7 @@ export async function createUser(formData: unknown) {
         revalidatePath("/dashboard/users");
         return { success: true, data: user };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to create user";
+        const message = publicErrorMessage(error, "Failed to create user");
         return { success: false, error: message };
     }
 }
@@ -123,7 +124,7 @@ export async function updateUser(id: string, formData: unknown) {
         revalidatePath(`/dashboard/users/${id}/edit`);
         return { success: true, data: user };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to update user";
+        const message = publicErrorMessage(error, "Failed to update user");
         return { success: false, error: message };
     }
 }
@@ -148,7 +149,7 @@ export async function resetUserPassword(id: string, formData: unknown) {
         revalidatePath(`/dashboard/users/${id}/edit`);
         return { success: true };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to reset password";
+        const message = publicErrorMessage(error, "Failed to reset password");
         return { success: false, error: message };
     }
 }
@@ -178,7 +179,7 @@ export async function deleteUser(id: string) {
         revalidatePath("/dashboard/users");
         return { success: true };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to delete user";
+        const message = publicErrorMessage(error, "Failed to delete user");
         return { success: false, error: message };
     }
 }
@@ -206,7 +207,7 @@ export async function getUserById(id: string) {
 
         return { success: true, data: user };
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Failed to fetch user";
+        const message = publicErrorMessage(error, "Failed to fetch user");
         return { success: false, error: message };
     }
 }
