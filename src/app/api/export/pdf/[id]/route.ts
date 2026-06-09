@@ -6,6 +6,7 @@ import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import fs from "fs";
 import path from "path";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 
 export async function GET(
     req: NextRequest,
@@ -51,7 +52,7 @@ export async function GET(
             sector: tx.sector,
             billNo: tx.salesBillNo,
             dateBS: tx.salesDateBS,
-            dateAD: tx.salesDate.toLocaleDateString(),
+            dateAD: formatDisplayDate(tx.salesDate),
             salesAmount: Number(tx.salesAmount).toLocaleString(),
             taxableAmount: Number(tx.taxableAmount).toLocaleString(),
             vatAmount: Number(tx.vatAmount).toLocaleString(),

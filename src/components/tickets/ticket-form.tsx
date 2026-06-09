@@ -45,6 +45,7 @@ function buildInitialLegs(initialData?: Record<string, unknown>): PurchaseLegFor
                       ? (initialData?.exemptAmount ?? "0")
                       : "0"
             ),
+            ticketNo: String(leg.ticketNo || ""),
         }));
     }
     return [emptyLeg()];
@@ -113,6 +114,8 @@ export default function TicketEntryForm({
     });
 
     const salesOnly = billingMode === "SINGLE" && purchaseLegs.length === 0;
+    const useLegTicketNos =
+        billingMode === "SPLIT" || (billingMode === "SINGLE" && purchaseLegs.length >= 2);
 
     useEffect(() => {
         if (!formData.salesDateBS && formData.salesDate) {
@@ -170,7 +173,7 @@ export default function TicketEntryForm({
     }, [salesOnly, formData.exemptAmount, purchaseLegs]);
 
     const resizePassengers = (count: number) => {
-        const n = Math.max(1, Math.min(20, count));
+        const n = Math.max(1, count);
         setPassengerCount(n);
         setPassengers((prev) => {
             const next = [...prev];
@@ -291,6 +294,7 @@ export default function TicketEntryForm({
             salesAmount:
                 billingMode === "SPLIT" ? parseFloat(leg.salesAmount) || 0 : undefined,
             exemptAmount: parseFloat(leg.exemptAmount) || 0,
+            ticketNo: leg.ticketNo.trim() || null,
         }));
 
         const payload =
@@ -389,7 +393,7 @@ export default function TicketEntryForm({
                                     {
                                         id: "SPLIT" as const,
                                         title: "Separate sales bills",
-                                        desc: "One customer bill per purchase leg / sector",
+                                        desc: "Multiple supplier invoices → one sales bill per leg with its own sector price",
                                     },
                                 ] as const
                             ).map((mode) => (
@@ -444,7 +448,6 @@ export default function TicketEntryForm({
                             <input
                                 type="number"
                                 min={1}
-                                max={20}
                                 required
                                 value={passengerCount}
                                 onChange={(e) => resizePassengers(parseInt(e.target.value, 10) || 1)}
@@ -473,20 +476,26 @@ export default function TicketEntryForm({
                                         />
                                     </div>
                                     <div className="flex gap-3 items-end">
-                                        <div className="flex-1">
-                                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
-                                                Ticket No
-                                            </label>
-                                            <input
-                                                type="text"
-                                                placeholder="Ticket Number"
-                                                value={p.ticketNo}
-                                                onChange={(e) =>
-                                                    handlePassengerChange(i, "ticketNo", e.target.value)
-                                                }
-                                                className="w-full bg-white border-slate-200 rounded-lg px-4 py-2 text-slate-900 text-sm focus:ring-brand-red focus:border-brand-red transition-all"
-                                            />
-                                        </div>
+                                        {!useLegTicketNos && (
+                                            <div className="flex-1">
+                                                <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+                                                    Ticket No
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Ticket Number"
+                                                    value={p.ticketNo}
+                                                    onChange={(e) =>
+                                                        handlePassengerChange(
+                                                            i,
+                                                            "ticketNo",
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    className="w-full bg-white border-slate-200 rounded-lg px-4 py-2 text-slate-900 text-sm focus:ring-brand-red focus:border-brand-red transition-all"
+                                                />
+                                            </div>
+                                        )}
                                         {passengers.length > 1 && (
                                             <button
                                                 type="button"
@@ -497,6 +506,12 @@ export default function TicketEntryForm({
                                             </button>
                                         )}
                                     </div>
+                                    {useLegTicketNos && i === 0 && (
+                                        <p className="text-[10px] text-slate-500">
+                                            Ticket numbers are entered on each purchase leg (different
+                                            carriers per sector).
+                                        </p>
+                                    )}
                                 </div>
                             ))}
                         </div>

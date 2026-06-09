@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { Transaction } from "@prisma/client";
 import { formatPassengerNames } from "@/lib/utils/parse-passengers";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 
 const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
@@ -26,7 +27,7 @@ export const sendFlightAlert = async (to: string, tx: Transaction, timeLeft: str
         <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
           <p><strong>Passenger:</strong> ${passengerLabel}</p>
           <p><strong>Sector:</strong> ${tx.sector}</p>
-          <p><strong>Travel Date:</strong> ${tx.travelDate?.toLocaleDateString()}</p>
+          <p><strong>Travel Date:</strong> ${formatDisplayDate(tx.travelDate)}</p>
           <p><strong>Bill No:</strong> ${tx.salesBillNo}</p>
         </div>
         <p>Status: ${timeLeft} before travel.</p>

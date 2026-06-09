@@ -7,12 +7,14 @@ import {
     formatCompactPassengerDisplay,
 } from "@/lib/utils/parse-passengers";
 import { buildInvoiceLineItems } from "@/lib/booking/helpers";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 
 type InvoiceLeg = {
     sector: string;
     lineSalesAmount: { toString(): string } | number;
     exemptAmount?: { toString(): string } | number;
     travelDate?: Date | null;
+    ticketNo?: string | null;
 };
 
 type InvoiceTransaction = {
@@ -53,6 +55,7 @@ export default function InvoiceDocument({
     const companyVatNo = process.env.COMPANY_VAT_NO?.trim() || "";
     const title = variant === "tax" ? "TAX INVOICE" : "PERFORMA INVOICE";
     const showWatermark = variant === "proforma";
+    const showVatNumbers = variant === "tax";
 
     const legSource =
         tx.purchaseLegs && tx.purchaseLegs.length > 0
@@ -61,8 +64,16 @@ export default function InvoiceDocument({
                   lineSalesAmount: Number(leg.lineSalesAmount),
                   exemptAmount: Number(leg.exemptAmount ?? 0),
                   travelDate: leg.travelDate ?? null,
+                  ticketNo: leg.ticketNo ?? null,
               }))
-            : [{ sector: tx.sector, lineSalesAmount: grandTotal, travelDate: tx.travelDate }];
+            : [
+                  {
+                      sector: tx.sector,
+                      lineSalesAmount: grandTotal,
+                      travelDate: tx.travelDate,
+                      ticketNo: null,
+                  },
+              ];
 
     const lineItems = buildInvoiceLineItems(legSource, exempt);
     const multiLeg = legSource.length > 1;
@@ -87,23 +98,27 @@ export default function InvoiceDocument({
             </div>
 
             <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center">
-                    <span className="font-medium whitespace-nowrap">VAT NO:</span>
-                    <div className="flex ml-1">
-                        {companyVatNo.split("").map((digit, i) => (
-                            <div
-                                key={i}
-                                className="w-6 h-7 border border-foreground flex items-center justify-center text-sm font-bold"
-                            >
-                                {digit}
-                            </div>
-                        ))}
+                {showVatNumbers && companyVatNo ? (
+                    <div className="flex items-center">
+                        <span className="font-medium whitespace-nowrap">VAT NO:</span>
+                        <div className="flex ml-1">
+                            {companyVatNo.split("").map((digit, i) => (
+                                <div
+                                    key={i}
+                                    className="w-6 h-7 border border-foreground flex items-center justify-center text-sm font-bold"
+                                >
+                                    {digit}
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <span />
+                )}
                 <div className="flex items-center gap-2">
                     <span className="font-medium">Date:</span>
                     <span className="inline-block w-40 border-b border-dotted border-foreground/40">
-                        &nbsp;{tx.salesDate.toLocaleDateString()}
+                        &nbsp;{formatDisplayDate(tx.salesDate)}
                     </span>
                 </div>
             </div>
@@ -134,19 +149,23 @@ export default function InvoiceDocument({
                     <span className="flex-1 border-b border-dotted border-foreground/40">&nbsp;{tx.contactNo}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                        <span className="font-medium whitespace-nowrap">Party VAT NO. :</span>
-                        <div className="flex ml-2">
-                            {Array.from({ length: 9 }).map((_, i) => (
-                                <div
-                                    key={i}
-                                    className="w-6 h-7 border border-foreground flex items-center justify-center text-xs font-bold"
-                                >
-                                    {tx.partyVatNo?.[i] || ""}
-                                </div>
-                            ))}
+                    {showVatNumbers ? (
+                        <div className="flex items-center">
+                            <span className="font-medium whitespace-nowrap">Party VAT NO. :</span>
+                            <div className="flex ml-2">
+                                {Array.from({ length: 9 }).map((_, i) => (
+                                    <div
+                                        key={i}
+                                        className="w-6 h-7 border border-foreground flex items-center justify-center text-xs font-bold"
+                                    >
+                                        {tx.partyVatNo?.[i] || ""}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    ) : (
+                        <span />
+                    )}
                     <div className="flex items-center gap-2">
                         <span className="font-medium whitespace-nowrap">Invoice No.:</span>
                         <span className="inline-block w-32 border-b border-dotted border-foreground/40">
@@ -203,9 +222,9 @@ export default function InvoiceDocument({
                                     )}
                                     <p className="font-bold text-slate-700">
                                         Flight date:{" "}
-                                        {(
+                                        {formatDisplayDate(
                                             legSource[index]?.travelDate ?? tx.travelDate
-                                        )?.toLocaleDateString() ?? "—"}
+                                        )}
                                     </p>
                                     {index === 0 && (
                                         <div className="pt-0.5 border-t border-slate-100">
@@ -225,14 +244,22 @@ export default function InvoiceDocument({
                                                 passengers.map((p, idx) => (
                                                     <p key={idx} className="font-bold text-slate-800">
                                                         {p.name}
-                                                        <span className="text-slate-500 font-semibold">
-                                                            {" "}
-                                                            · Ticket No: {p.ticketNo || "N/A"}
-                                                        </span>
+                                                        {!multiLeg && (
+                                                            <span className="text-slate-500 font-semibold">
+                                                                {" "}
+                                                                · Ticket No: {p.ticketNo || "N/A"}
+                                                            </span>
+                                                        )}
                                                     </p>
                                                 ))
                                             )}
                                         </div>
+                                    )}
+                                    {multiLeg && (
+                                        <p className="font-bold text-slate-700">
+                                            Ticket No:{" "}
+                                            {legSource[index]?.ticketNo?.trim() || "N/A"}
+                                        </p>
                                     )}
                                 </div>
                             </td>

@@ -3,6 +3,7 @@ import { PartnerType } from "@prisma/client";
 import { formatPassengerNames } from "@/lib/utils/parse-passengers";
 import { adToBs } from "@/lib/utils/nepali-calendar";
 import { sumRefundTotals } from "@/lib/refunds/helpers";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 
 export type PartyLedgerSummary = {
     partyName: string;
@@ -95,7 +96,7 @@ export function computeClosingBalance(
 function formatTravelDate(tx: { travelDate: Date | null }): { ad: string | null; bs: string | null } {
     if (!tx.travelDate) return { ad: null, bs: null };
     return {
-        ad: tx.travelDate.toLocaleDateString(),
+        ad: formatDisplayDate(tx.travelDate),
         bs: adToBs(tx.travelDate),
     };
 }

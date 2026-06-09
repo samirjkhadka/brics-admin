@@ -16,10 +16,6 @@ type PartnerFormData = {
     contactNo: string;
     email: string;
     vatNo: string;
-    bankName: string;
-    accountNumber: string;
-    accountHolderName: string;
-    branch: string;
     address: string;
     remarks: string;
     isActive: boolean;
@@ -37,16 +33,10 @@ export default function PartnerForm({ initialData }: { initialData?: PartnerForm
         contactNo: initialData?.contactNo || "",
         email: initialData?.email || "",
         vatNo: initialData?.vatNo || "",
-        bankName: initialData?.bankName === "Pending" ? "" : initialData?.bankName || "",
-        accountNumber: initialData?.accountNumber === "Pending" ? "" : initialData?.accountNumber || "",
-        accountHolderName: initialData?.accountHolderName || "",
-        branch: initialData?.branch || "",
         address: initialData?.address || "",
         remarks: initialData?.remarks || "",
         isActive: initialData?.isActive ?? true,
     });
-
-    const bankRequired = formData.type === PartnerType.SUPPLIER;
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -124,53 +114,6 @@ export default function PartnerForm({ initialData }: { initialData?: PartnerForm
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">VAT No</label>
                     <input type="text" name="vatNo" value={formData.vatNo} onChange={handleChange} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm" />
-                </div>
-            </div>
-
-            <div className="border-t border-slate-100 pt-4">
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-1">Bank Details</h3>
-                <p className="text-xs text-slate-500 mb-4">
-                    {formData.type === PartnerType.CUSTOMER
-                        ? "Optional for customers — can be added later."
-                        : "Required for suppliers."}
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                            Bank Name {bankRequired && "*"}
-                        </label>
-                        <input
-                            type="text"
-                            name="bankName"
-                            required={bankRequired}
-                            value={formData.bankName}
-                            onChange={handleChange}
-                            placeholder={bankRequired ? "" : "Optional"}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                            Account Number {bankRequired && "*"}
-                        </label>
-                        <input
-                            type="text"
-                            name="accountNumber"
-                            required={bankRequired}
-                            value={formData.accountNumber}
-                            onChange={handleChange}
-                            placeholder={bankRequired ? "" : "Optional"}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Account Holder</label>
-                        <input type="text" name="accountHolderName" value={formData.accountHolderName} onChange={handleChange} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm" />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Branch</label>
-                        <input type="text" name="branch" value={formData.branch} onChange={handleChange} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm" />
-                    </div>
                 </div>
             </div>
 

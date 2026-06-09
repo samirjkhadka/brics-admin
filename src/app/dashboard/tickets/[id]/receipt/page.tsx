@@ -1,4 +1,5 @@
 import db from "@/lib/db";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download } from "lucide-react";
 import Link from "next/link";
@@ -49,13 +50,13 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
             <ReceiptDocument
                 data={{
                     receiptNo: receipt.receiptNo,
-                    receiptDateAD: receipt.receiptDateAD.toLocaleDateString(),
+                    receiptDateAD: formatDisplayDate(receipt.receiptDateAD),
                     receiptDateBS: receipt.receiptDateBS,
                     partyName: receipt.partyName,
                     amount: Number(receipt.amount),
                     paymentMethod: receipt.paymentMethod,
                     chequeNo: receipt.chequeNo,
-                    travelDate: receipt.transaction?.travelDate?.toLocaleDateString() || null,
+                    travelDate: formatDisplayDate(receipt.transaction?.travelDate, ""),
                     sector: receipt.transaction?.sector || null,
                     billNo: receipt.transaction?.salesBillNo || null,
                 }}

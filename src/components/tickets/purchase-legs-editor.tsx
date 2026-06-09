@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
-import { Plus, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Plus, X, Split } from "lucide-react";
 import PartnerCombobox, { PartnerOption } from "@/components/ui/partner-combobox";
 import RouteBuilder from "@/components/ui/route-builder";
 import NepaliDatePicker from "@/components/ui/nepali-date-picker";
-import { joinSectors } from "@/lib/booking/helpers";
+import { allocateLineSalesAmounts, joinSectors } from "@/lib/booking/helpers";
 import { calculateTax } from "@/lib/utils/calculations";
 import { formatNPR } from "@/lib/utils/format-currency";
 
@@ -21,6 +21,7 @@ export type PurchaseLegFormRow = {
     lineSalesAmount: string;
     salesAmount: string;
     exemptAmount: string;
+    ticketNo: string;
 };
 
 export const emptyLeg = (): PurchaseLegFormRow => ({
@@ -35,6 +36,7 @@ export const emptyLeg = (): PurchaseLegFormRow => ({
     lineSalesAmount: "",
     salesAmount: "",
     exemptAmount: "0",
+    ticketNo: "",
 });
 
 type PurchaseLegsEditorProps = {
@@ -57,6 +59,45 @@ export default function PurchaseLegsEditor({
     minLegs = 1,
 }: PurchaseLegsEditorProps) {
     const combinedSector = useMemo(() => joinSectors(legs), [legs]);
+    const [splitTotalSales, setSplitTotalSales] = useState("");
+    const [splitError, setSplitError] = useState("");
+
+    const totalPurchase = useMemo(
+        () => legs.reduce((s, l) => s + (parseFloat(l.purchaseAmount) || 0), 0),
+        [legs]
+    );
+
+    const showSplitSales = legs.length >= 2;
+    const showLegTicketNo = legs.length >= 2 || billingMode === "SPLIT";
+
+    const splitSalesAcrossLegs = () => {
+        const total = parseFloat(splitTotalSales);
+        if (!total || total <= 0) {
+            setSplitError("Enter a total sales amount greater than zero.");
+            return;
+        }
+
+        const purchaseAmounts = legs.map((l) => parseFloat(l.purchaseAmount) || 0);
+        if (purchaseAmounts.every((p) => p <= 0)) {
+            setSplitError("Enter purchase amounts on each leg before splitting.");
+            return;
+        }
+
+        const amounts = allocateLineSalesAmounts(
+            purchaseAmounts.map((purchaseAmount) => ({ purchaseAmount })),
+            total
+        );
+
+        const next = legs.map((leg, i) => ({
+            ...leg,
+            ...(billingMode === "SINGLE"
+                ? { lineSalesAmount: amounts[i].toFixed(2) }
+                : { salesAmount: amounts[i].toFixed(2) }),
+        }));
+
+        onChange(next);
+        setSplitError("");
+    };
 
     const updateLeg = (index: number, patch: Partial<PurchaseLegFormRow>) => {
         const next = legs.map((leg, i) => (i === index ? { ...leg, ...patch } : leg));
@@ -86,6 +127,68 @@ export default function PurchaseLegsEditor({
                     No purchase legs — this entry is sales only. Add a leg if you have supplier
                     purchase details.
                 </p>
+            )}
+
+            {showSplitSales && (
+                <div className="bg-violet-50/80 border border-violet-200 rounded-xl p-4 space-y-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-wider text-violet-900">
+                                Split total sales across legs
+                            </p>
+                            <p className="text-[11px] text-violet-700 mt-1 max-w-xl">
+                                {billingMode === "SPLIT"
+                                    ? "Distributes the total customer price across separate sales bills by each leg’s purchase amount."
+                                    : "Distributes one combined sales total across legs on a single bill by purchase amount."}
+                            </p>
+                        </div>
+                        <p className="text-[11px] text-violet-600 font-semibold">
+                            Total purchase: {formatNPR(totalPurchase)}
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap items-end gap-3">
+                        <div className="flex-1 min-w-[180px] max-w-xs">
+                            <label className="block text-[10px] uppercase font-bold text-violet-700 mb-1">
+                                Total sales (NPR)
+                            </label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={splitTotalSales}
+                                onChange={(e) => {
+                                    setSplitTotalSales(e.target.value);
+                                    setSplitError("");
+                                }}
+                                placeholder="e.g. 294000"
+                                className="w-full bg-white border border-violet-200 rounded-lg px-3 py-2 text-sm font-mono"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={splitSalesAcrossLegs}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-colors"
+                        >
+                            <Split size={14} />
+                            Split by purchase ratio
+                        </button>
+                    </div>
+                    {splitError && (
+                        <p className="text-xs text-red-600 font-semibold">{splitError}</p>
+                    )}
+                    {totalPurchase > 0 && splitTotalSales && parseFloat(splitTotalSales) > 0 && (
+                        <p className="text-[10px] text-violet-600">
+                            Preview:{" "}
+                            {legs
+                                .map((leg, i) => {
+                                    const purchase = parseFloat(leg.purchaseAmount) || 0;
+                                    const share = ((purchase / totalPurchase) * 100).toFixed(1);
+                                    return `Leg ${i + 1} ${share}%`;
+                                })
+                                .join(" · ")}
+                        </p>
+                    )}
+                </div>
             )}
 
             {legs.map((leg, index) => (
@@ -154,6 +257,26 @@ export default function PurchaseLegsEditor({
                             onChange={(sector) => updateLeg(index, { sector })}
                         />
                     </div>
+
+                    {showLegTicketNo && (
+                        <div>
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+                                Ticket No
+                            </label>
+                            <input
+                                type="text"
+                                value={leg.ticketNo}
+                                onChange={(e) => updateLeg(index, { ticketNo: e.target.value })}
+                                placeholder="e.g. SUM99999"
+                                className="w-full bg-white border-slate-200 rounded-lg px-3 py-2 text-sm font-mono"
+                            />
+                            {legs.length >= 2 && (
+                                <p className="text-[10px] text-slate-400 mt-1">
+                                    Each sector may use a different carrier ticket number.
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <NepaliDatePicker

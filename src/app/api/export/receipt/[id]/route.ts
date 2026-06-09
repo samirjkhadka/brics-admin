@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Role } from "@prisma/client";
 import db from "@/lib/db";
 import { requireApiRole } from "@/lib/security/api-auth";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import fs from "fs";
@@ -66,8 +67,8 @@ export async function GET(
             paymentMethod: paymentLabel(receipt.paymentMethod),
             chequeNo: receipt.chequeNo || "",
             dateBS: receipt.receiptDateBS,
-            dateAD: receipt.receiptDateAD.toLocaleDateString(),
-            travelDate: receipt.transaction?.travelDate?.toLocaleDateString() || "",
+            dateAD: formatDisplayDate(receipt.receiptDateAD),
+            travelDate: formatDisplayDate(receipt.transaction?.travelDate, ""),
             sector: receipt.transaction?.sector || "",
             bankName: "",
         });

@@ -21,6 +21,7 @@ import BulkPaymentModal from "@/components/tickets/bulk-payment-modal";
 import BulkVoidModal from "@/components/tickets/bulk-void-modal";
 import Link from "next/link";
 import { formatNumber } from "@/lib/utils/format-currency";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 import { isOwnSalesBill, isPurchasePartyUnset } from "@/lib/utils/purchase-party";
 import { displayPaymentMethod } from "@/lib/utils/payment-status";
 import { formatPassengerNames } from "@/lib/utils/parse-passengers";
@@ -217,6 +218,7 @@ export default function TransactionsTableClient({
     initialSectorFilter = "",
     initialPurchaseFromFilter = "",
     initialPartyFilter = "",
+    initialTravelDate = "",
     initialSearchTerm = "",
 }: {
     initialData: Transaction[];
@@ -224,6 +226,7 @@ export default function TransactionsTableClient({
     initialSectorFilter?: string;
     initialPurchaseFromFilter?: string;
     initialPartyFilter?: string;
+    initialTravelDate?: string;
     initialSearchTerm?: string;
 }) {
     const router = useRouter();
@@ -237,12 +240,16 @@ export default function TransactionsTableClient({
     const [bulkActionLoading, setBulkActionLoading] = useState(false);
     const [expandBookingGroups, setExpandBookingGroups] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
-    const [filterType, setFilterType] = useState<"ALL" | "MONTH" | "YEAR" | "CUSTOM">("ALL");
-    const [dateFieldFilter, setDateFieldFilter] = useState<DateFieldFilter>("sales");
+    const [filterType, setFilterType] = useState<"ALL" | "MONTH" | "YEAR" | "CUSTOM">(
+        initialTravelDate ? "CUSTOM" : "ALL"
+    );
+    const [dateFieldFilter, setDateFieldFilter] = useState<DateFieldFilter>(
+        initialTravelDate ? "travel" : "sales"
+    );
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
-    const [startDate, setStartDate] = useState("");
-    const [endDate, setEndDate] = useState("");
+    const [startDate, setStartDate] = useState(initialTravelDate);
+    const [endDate, setEndDate] = useState(initialTravelDate);
     const [billNoFrom, setBillNoFrom] = useState("");
     const [billNoTo, setBillNoTo] = useState("");
     const [paymentFilter, setPaymentFilter] = useState<"ALL" | "UNPAID" | "PARTIAL" | "PAID">("ALL");
@@ -383,6 +390,7 @@ export default function TransactionsTableClient({
         sectorFilter,
         purchaseFromFilter,
         partyFilter,
+        initialTravelDate,
     ]);
 
     const selectedTransactions = useMemo(
@@ -473,6 +481,7 @@ export default function TransactionsTableClient({
         sectorFilter,
         purchaseFromFilter,
         partyFilter,
+        initialTravelDate,
         sortKey,
         sortDir,
         itemsPerPage,
@@ -550,6 +559,27 @@ export default function TransactionsTableClient({
                         type="button"
                         onClick={() => setPartyFilter("")}
                         className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-900 text-xs font-bold"
+                    >
+                        <X size={14} /> Clear
+                    </button>
+                </div>
+            )}
+
+            {initialTravelDate && startDate === initialTravelDate && endDate === initialTravelDate && (
+                <div className="mx-2 flex items-center gap-3 bg-sky-50 border border-sky-200 text-sky-800 px-4 py-2 rounded-xl text-sm font-semibold">
+                    <span>
+                        Travel date: <strong>{initialTravelDate}</strong>
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setFilterType("ALL");
+                            setDateFieldFilter("sales");
+                            setStartDate("");
+                            setEndDate("");
+                            router.push("/dashboard/tickets");
+                        }}
+                        className="inline-flex items-center gap-1 text-sky-600 hover:text-sky-900 text-xs font-bold"
                     >
                         <X size={14} /> Clear
                     </button>
@@ -918,7 +948,7 @@ export default function TransactionsTableClient({
                                             {tx.purchaseDate ? (
                                                 <>
                                                     <div className="text-slate-900 font-medium">
-                                                        {new Date(tx.purchaseDate).toLocaleDateString()}
+                                                        {formatDisplayDate(tx.purchaseDate)}
                                                     </div>
                                                     <div className="text-[10px] text-slate-400">{tx.purchaseDateBS}</div>
                                                 </>
@@ -930,7 +960,7 @@ export default function TransactionsTableClient({
                                             {tx.travelDate ? (
                                                 <>
                                                     <div className="text-slate-900 font-medium">
-                                                        {new Date(tx.travelDate).toLocaleDateString()}
+                                                        {formatDisplayDate(tx.travelDate)}
                                                     </div>
                                                     <div className="text-[10px] text-slate-400">{tx.travelDateBS}</div>
                                                 </>
@@ -940,7 +970,7 @@ export default function TransactionsTableClient({
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap">
                                             <div className="text-slate-900 font-medium">
-                                                {new Date(tx.salesDate).toLocaleDateString()}
+                                                {formatDisplayDate(tx.salesDate)}
                                             </div>
                                             <div className="text-[10px] text-slate-400">{tx.salesDateBS}</div>
                                         </td>

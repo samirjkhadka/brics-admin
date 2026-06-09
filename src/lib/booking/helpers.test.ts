@@ -34,6 +34,19 @@ describe("booking helpers", () => {
         expect(amounts[1]).toBe(40000);
     });
 
+    it("splits total sales across two legs by purchase ratio (multi-sector booking)", () => {
+        const amounts = allocateLineSalesAmounts(
+            [
+                { purchaseAmount: 35000 },
+                { purchaseAmount: 85000 },
+            ],
+            294000
+        );
+        expect(amounts[0]).toBe(85750);
+        expect(amounts[1]).toBe(208250);
+        expect(amounts[0] + amounts[1]).toBe(294000);
+    });
+
     it("builds invoice line items with per-line tax formula", () => {
         const lines = buildInvoiceLineItems(
             [

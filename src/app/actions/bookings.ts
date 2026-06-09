@@ -84,6 +84,7 @@ function buildLegRows(legs: PurchaseLegInput[], lineSalesAmounts: number[]) {
         purchaseAmount: toDecimal(leg.purchaseAmount),
         lineSalesAmount: toDecimal(lineSalesAmounts[index]),
         exemptAmount: toDecimal(leg.exemptAmount ?? 0),
+        ticketNo: leg.ticketNo?.trim() || null,
     }));
 }
 
@@ -332,6 +333,8 @@ export async function createBooking(formData: unknown) {
                                 ...legTravelFields(leg),
                                 purchaseAmount: toDecimal(leg.purchaseAmount),
                                 lineSalesAmount: toDecimal(salesAmount),
+                                exemptAmount: toDecimal(exemptAmount),
+                                ticketNo: leg.ticketNo?.trim() || null,
                             },
                         ],
                     },
@@ -465,6 +468,8 @@ export async function updateBooking(id: string, formData: unknown) {
                                 ...legTravelFields(leg),
                                 purchaseAmount: toDecimal(leg.purchaseAmount),
                                 lineSalesAmount: toDecimal(salesAmount),
+                                exemptAmount: toDecimal(exemptAmount),
+                                ticketNo: leg.ticketNo?.trim() || null,
                             },
                         ],
                     },

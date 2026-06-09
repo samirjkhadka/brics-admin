@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PartyLedgerLine } from "@/lib/ledger/party-ledger";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 import { formatNPR } from "@/lib/utils/format-currency";
 
 function BillLink({ billNo, transactionId }: { billNo: string; transactionId?: string | null }) {
@@ -110,7 +111,7 @@ export default function LedgerDetailTable({ lines }: { lines: PartyLedgerLine[] 
                                 {line.dateBS}
                             </td>
                             <td className="border border-slate-300 px-2 py-1.5 print:px-1 print:py-0.5 whitespace-nowrap print:hidden">
-                                {line.voucherType === "Opening" ? "—" : line.date.toLocaleDateString()}
+                                {line.voucherType === "Opening" ? "—" : formatDisplayDate(line.date)}
                             </td>
                             <td className="border border-slate-300 px-2 py-1.5 print:px-1 print:py-0.5 font-semibold whitespace-nowrap">
                                 {line.voucherType}

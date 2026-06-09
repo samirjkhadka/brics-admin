@@ -13,6 +13,7 @@ export const purchaseLegSchema = z.object({
     lineSalesAmount: z.coerce.number().min(0).optional(),
     salesAmount: z.coerce.number().min(0).optional(),
     exemptAmount: z.coerce.number().min(0).optional(),
+    ticketNo: z.string().optional().nullable(),
 });
 
 const sharedBookingFields = z.object({

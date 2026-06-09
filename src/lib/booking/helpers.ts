@@ -13,6 +13,7 @@ export type PurchaseLegInput = {
     lineSalesAmount?: number;
     salesAmount?: number;
     exemptAmount?: number;
+    ticketNo?: string | null;
 };
 
 export function joinSectors(legs: { sector: string }[]): string {

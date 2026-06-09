@@ -9,9 +9,15 @@ import { Role } from "@prisma/client";
 export default async function TransactionsListPage({
     searchParams,
 }: {
-    searchParams: Promise<{ sector?: string; purchaseFrom?: string; party?: string; search?: string }>;
+    searchParams: Promise<{
+        sector?: string;
+        purchaseFrom?: string;
+        party?: string;
+        search?: string;
+        travelDate?: string;
+    }>;
 }) {
-    const { sector, purchaseFrom, party, search } = await searchParams;
+    const { sector, purchaseFrom, party, search, travelDate } = await searchParams;
     const session = await getSession();
     const canEdit = session?.user?.role === Role.SUPERADMIN || session?.user?.role === Role.ADMIN;
 
@@ -89,6 +95,7 @@ export default async function TransactionsListPage({
                 initialPurchaseFromFilter={purchaseFrom ? decodeURIComponent(purchaseFrom) : ""}
                 initialPartyFilter={party ? decodeURIComponent(party) : ""}
                 initialSearchTerm={search ? decodeURIComponent(search) : ""}
+                initialTravelDate={travelDate ? decodeURIComponent(travelDate) : ""}
             />
         </div>
     );

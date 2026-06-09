@@ -28,18 +28,6 @@ export const partnerSchema = z
         ...data,
         bankName: data.bankName?.trim() || "Pending",
         accountNumber: data.accountNumber?.trim() || "Pending",
-    }))
-    .refine(
-        (data) => {
-            if (data.type === PartnerType.CUSTOMER) return true;
-            return (
-                data.bankName !== "Pending" &&
-                data.accountNumber !== "Pending" &&
-                data.bankName.length > 0 &&
-                data.accountNumber.length > 0
-            );
-        },
-        { message: "Suppliers require bank name and account number", path: ["bankName"] }
-    );
+    }));
 
 export type PartnerInput = z.infer<typeof partnerSchema>;

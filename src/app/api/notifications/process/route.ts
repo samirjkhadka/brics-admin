@@ -10,6 +10,7 @@ import {
     verifyCronBearer,
 } from "@/lib/security/cron-auth";
 import { publicErrorMessage } from "@/lib/security/sanitize-error";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 
 const ALERT_WINDOWS: { type: string; minHours: number; maxHours: number }[] = [
     { type: "3 days", minHours: 60, maxHours: 84 },
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
                             const passenger = tx.passengerNames?.slice(0, 40) || "Passenger";
                             await sendSmsAlert(
                                 smsTo,
-                                `BRICS flight alert (${window.type}): ${passenger} — ${tx.sector} on ${tx.travelDate?.toLocaleDateString()}`
+                                `BRICS flight alert (${window.type}): ${passenger} — ${tx.sector} on ${formatDisplayDate(tx.travelDate)}`
                             );
                         }
 

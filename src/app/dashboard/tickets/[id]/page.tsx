@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Download, ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
 import { formatNPR } from "@/lib/utils/format-currency";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 import {
     formatPurchasedFromLabel,
     isOwnSalesBill,
@@ -92,6 +93,7 @@ export default async function TransactionDetailPage({
                                 <th className="px-6 py-3">Purchase Invoice</th>
                                 <th className="px-6 py-3">Supplier</th>
                                 <th className="px-6 py-3">Sector</th>
+                                <th className="px-6 py-3">Ticket No</th>
                                 <th className="px-6 py-3 text-right">Purchase</th>
                                 <th className="px-6 py-3 text-right">Line Sales</th>
                             </tr>
@@ -103,6 +105,9 @@ export default async function TransactionDetailPage({
                                     <td className="px-6 py-3 font-mono">{leg.purchaseInvoiceNo}</td>
                                     <td className="px-6 py-3">{leg.purchasePartyName}</td>
                                     <td className="px-6 py-3 font-medium">{leg.sector}</td>
+                                    <td className="px-6 py-3 font-mono text-slate-600">
+                                        {leg.ticketNo || "—"}
+                                    </td>
                                     <td className="px-6 py-3 text-right">{formatNPR(leg.purchaseAmount)}</td>
                                     <td className="px-6 py-3 text-right font-semibold">
                                         {formatNPR(leg.lineSalesAmount)}
@@ -207,7 +212,7 @@ export default async function TransactionDetailPage({
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Invoice Details</p>
                             <p className="text-lg font-black text-slate-900">#{tx.salesBillNo}</p>
                             <p className="text-sm text-slate-600 font-medium mt-1">Date (BS): <span className="text-slate-900">{tx.salesDateBS}</span></p>
-                            <p className="text-sm text-slate-600 font-medium">Date (AD): <span className="text-slate-900">{tx.salesDate.toLocaleDateString()}</span></p>
+                            <p className="text-sm text-slate-600 font-medium">Date (AD): <span className="text-slate-900">{formatDisplayDate(tx.salesDate)}</span></p>
                         </div>
                     </div>
                 </div>
@@ -231,7 +236,14 @@ export default async function TransactionDetailPage({
                                           lineSalesAmount: tx.salesAmount,
                                       },
                                   ]
-                            ).map((leg, index) => (
+                            ).map((leg, index) => {
+                                const multiLeg = tx.purchaseLegs.length > 1;
+                                const legTicketNo =
+                                    "ticketNo" in leg && leg.ticketNo
+                                        ? String(leg.ticketNo)
+                                        : null;
+
+                                return (
                                 <tr key={leg.id}>
                                     <td className="px-6 py-8">
                                         {index === 0 ? (
@@ -240,7 +252,7 @@ export default async function TransactionDetailPage({
                                                     <p className="font-black text-slate-900 uppercase">Air Ticket</p>
                                                     <p className="text-xs text-slate-400 font-medium mt-1 italic">
                                                         Travel Date:{" "}
-                                                        {tx.travelDate?.toLocaleDateString() || "N/A"}
+                                                        {formatDisplayDate(tx.travelDate, "N/A")}
                                                     </p>
                                                 </div>
                                                 <div className="space-y-2">
@@ -252,15 +264,22 @@ export default async function TransactionDetailPage({
                                                             <p className="font-black text-slate-800 text-sm">
                                                                 {p.name}
                                                             </p>
-                                                            <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">
-                                                                Ticket: {p.ticketNo || "N/A"}
-                                                            </p>
+                                                            {!multiLeg && (
+                                                                <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">
+                                                                    Ticket: {p.ticketNo || "N/A"}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
                                         ) : (
                                             <span className="text-slate-400 text-xs">Additional sector</span>
+                                        )}
+                                        {multiLeg && (
+                                            <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mt-3">
+                                                Ticket: {legTicketNo || "N/A"}
+                                            </p>
                                         )}
                                     </td>
                                     <td className="px-6 py-8 text-center font-bold text-slate-700">
@@ -270,7 +289,8 @@ export default async function TransactionDetailPage({
                                         {formatNPR(leg.lineSalesAmount)}
                                     </td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -337,7 +357,7 @@ export default async function TransactionDetailPage({
                         )}
                         <div>
                             <span className="text-slate-500 font-bold text-[10px] uppercase">Receipt Date</span>
-                            <p className="text-slate-900 font-semibold">{tx.receivedDate?.toLocaleDateString() || "N/A"}</p>
+                            <p className="text-slate-900 font-semibold">{formatDisplayDate(tx.receivedDate, "N/A")}</p>
                         </div>
                         <div>
                             <span className="text-slate-500 font-bold text-[10px] uppercase">Receipt No</span>

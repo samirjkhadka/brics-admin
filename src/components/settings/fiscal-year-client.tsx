@@ -10,6 +10,7 @@ import {
     RECEIPT_FORMAT_PRESETS,
     previewBillFormat,
 } from "@/lib/fiscal-year/bill-format";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 
 type FY = {
     id: string;
@@ -120,7 +121,7 @@ export default function FiscalYearClient({
                             <div>
                                 <span className="text-slate-500 text-xs font-bold uppercase">Period (AD)</span>
                                 <p className="font-semibold">
-                                    {new Date(active.startDateAD).toLocaleDateString()} → {new Date(active.endDateAD).toLocaleDateString()}
+                                    {formatDisplayDate(active.startDateAD)} → {formatDisplayDate(active.endDateAD)}
                                 </p>
                             </div>
                         </div>

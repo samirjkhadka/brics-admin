@@ -13,6 +13,7 @@ import StatCard from "@/components/dashboard/stat-card";
 import FiscalYearStatCard from "@/components/dashboard/fiscal-year-stat-card";
 import { getRouteAnalytics } from "@/lib/dashboard/route-analytics";
 import { displayPaymentMethod } from "@/lib/utils/payment-status";
+import { formatDisplayDate } from "@/lib/utils/format-display-date";
 
 export default async function DashboardPage({
     searchParams,
@@ -316,11 +317,10 @@ export default async function DashboardPage({
                                     key={flight.id}
                                     className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100"
                                 >
-                                    <div className="flex-shrink-0 bg-brand-red/10 text-brand-red p-2 rounded-lg text-center min-w-[50px]">
-                                        <div className="text-[10px] font-black uppercase">
-                                            {flight.travelDate?.toLocaleDateString("en-US", { month: "short" })}
+                                    <div className="flex-shrink-0 bg-brand-red/10 text-brand-red p-2 rounded-lg text-center min-w-[88px]">
+                                        <div className="text-[10px] font-black uppercase leading-tight">
+                                            {formatDisplayDate(flight.travelDate)}
                                         </div>
-                                        <div className="text-lg font-black leading-none">{flight.travelDate?.getDate()}</div>
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-black text-slate-900 truncate">
